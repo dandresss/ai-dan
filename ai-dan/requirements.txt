@@ -1,0 +1,4 @@
+anthropic>=2.8
+pygame-ce>=2.5.8
+python-dotenv>=1.0
+pytest>=8
