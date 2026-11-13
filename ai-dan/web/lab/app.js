@@ -92,7 +92,7 @@ function firstWakeEvents() {
 // --- sessions --------------------------------------------------------------
 const start = new StartScreen({
   onWatch: async () => openReplay(await firstWakeEvents(), "first-wake.jsonl"),
-  onWake: (auth) => openLive(auth),
+  onWake: (choice) => openLive(choice),
   onDryrun: () => openLive({ dryrun: true }),
   onFile: (file) => openFile(file),
 }, load);
@@ -135,8 +135,10 @@ async function openFile(file) {
 }
 
 /** A live session, or the wiring test: Config, SessionLog, World, the model,
- * the harness, as lab/__main__.py builds them. */
-async function openLive({ dryrun = false, apiKey = null, accessCode = null, memory = false }) {
+ * the harness, as lab/__main__.py builds them. The mind always runs through
+ * this host (POST /api/mind), which holds the Anthropic key; `accessCode` is
+ * the host's code when it asks for one, and undefined otherwise. */
+async function openLive({ dryrun = false, accessCode = undefined, memory = false }) {
   const [{ Config }, { SessionLog }, { World }] = await Promise.all([load("config"), load("log"), load("world")]);
   const config = new Config(memory ? { MEMORY_ENABLED: true } : {});
   const log = new SessionLog();
@@ -145,8 +147,7 @@ async function openLive({ dryrun = false, apiKey = null, accessCode = null, memo
   let detail = null;
   try {
     const [{ AnthropicModel, ScriptedModel }, { Harness }] = await Promise.all([load("model"), load("harness")]);
-    const model = dryrun ? new ScriptedModel(config)
-      : new AnthropicModel(config, apiKey ? { apiKey } : { accessCode });
+    const model = dryrun ? new ScriptedModel(config) : new AnthropicModel(config, { accessCode });
     harness = new Harness(world, model, config, { noteStore: memory ? safeStorage() : null });
     harness.start();
   } catch (err) {   // the mind's modules are young; keep the body usable

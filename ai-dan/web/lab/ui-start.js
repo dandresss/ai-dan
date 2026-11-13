@@ -1,6 +1,7 @@
 // The start screen: the four ways into the room. It only collects what the
-// visitor chose and hands it to app.js; the key stays in its password field
-// and in the model object, and goes nowhere else.
+// visitor chose and hands it to app.js. The mind always runs through this
+// host (POST /api/mind), which holds the Anthropic key: the page never asks
+// for one. At most it asks for the host's access code.
 
 import { formatG } from "./render-base.js";
 
@@ -19,6 +20,30 @@ export function safeStorage() {
 
 const describe = (err) => (err instanceof Error ? err.message : String(err));
 
+/** What GET /api/mind says the host offers: "open" (a mind, no code needed),
+ * "code" (a mind behind an access code) or "none" (no mind, or no answer). */
+export function hostMind(answer) {
+  if (answer?.available !== true) return "none";
+  return answer.code === true ? "code" : "open";
+}
+
+const NO_MIND = "No mind is connected on this host, so a live session cannot start here.";
+const STILL_WORKS = "The first waking, the wiring test and session logs still work.";
+const money = (usd) => `$${Math.max(0, Number(usd) || 0).toFixed(2)}`;
+
+/** The lines the start card shows about the host's mind: why there is none
+ * (the host's own reason when it gives one), or what it may still spend. */
+export function hostNote(answer) {
+  if (hostMind(answer) === "none") {
+    const reason = typeof answer?.reason === "string" && answer.reason.trim() ? answer.reason.trim() : NO_MIND;
+    return { noMind: `${reason} ${STILL_WORKS}`, budget: null };
+  }
+  if (typeof answer.limit_usd !== "number") return { noMind: null, budget: null };
+  const limit = answer.limit_usd;
+  const left = typeof answer.spent_usd === "number" ? `; ${money(limit - answer.spent_usd)} is left` : "";
+  return { noMind: null, budget: `This host spends at most ${money(limit)} on the mind${left}.` };
+}
+
 /** A secret's value, taken out of its field: the page keeps it only in the
  * session it starts, never in the form, the DOM or storage. */
 export function takeValue(input) {
@@ -29,7 +54,7 @@ export function takeValue(input) {
 
 export class StartScreen {
   /**
-   * handlers: onWatch(), onWake({apiKey | accessCode, memory}), onDryrun(),
+   * handlers: onWatch(), onWake({accessCode, memory}), onDryrun(),
    * onFile(file); each may return a promise. load(name) imports a lab module.
    */
   constructor(handlers, load) {
@@ -40,29 +65,27 @@ export class StartScreen {
     this.errorEl = $("start-error");
     this.behindEl = $("behind");
     this.form = $("wake-form");
-    this.openButton = $("wake-open");
-    this.keyInput = $("api-key");
-    this.codeInput = $("access-code");
-    this.keyRow = $("key-row");
+    this.wakeButton = $("wake-go");
     this.codeRow = $("code-row");
-    this.authChoice = $("auth-choice");
+    this.codeInput = $("access-code");
+    this.wakeNote = $("wake-note");
+    this.noMind = $("no-mind");
+    this.budget = $("budget");
     this.memory = $("memory");
     this.later = $("later-days");
     this.noteState = $("note-state");
     this.forget = $("forget-note");
     this.fileInput = $("log-file");
     this.busy = false;
+    this.host = "checking";       // what GET /api/mind said: see hostMind
+    this.hostCheck = null;
 
     $("watch").addEventListener("click", () => this._run(() => this.handlers.onWatch()));
     $("dryrun").addEventListener("click", () => this._run(() => this.handlers.onDryrun()));
-    this.openButton.addEventListener("click", () => this._toggleForm());
     this.form.addEventListener("submit", (e) => {
       e.preventDefault();
       this._wake();
     });
-    for (const radio of this.authChoice.querySelectorAll("input")) {
-      radio.addEventListener("change", () => this._showAuth());
-    }
     this.later.addEventListener("toggle", () => this._noteState());
     this.forget.addEventListener("click", () => this._forgetNote());
 
@@ -79,7 +102,7 @@ export class StartScreen {
     });
     this._dropping();
     this._configLine();
-    this._accessCheck();
+    this._checkHost();
   }
 
   get visible() {
@@ -94,9 +117,9 @@ export class StartScreen {
 
   show() {
     this.el.hidden = false;
-    this.keyInput.value = "";
     this.codeInput.value = "";
     this.setError(null);
+    this._checkHost();          // the host may have changed since: a local server started, a code set
     document.getElementById("watch").focus({ preventScroll: true });
   }
 
@@ -130,33 +153,19 @@ export class StartScreen {
     }
   }
 
-  _toggleForm() {
-    const open = this.form.hidden;
-    this.form.hidden = !open;
-    this.openButton.setAttribute("aria-expanded", String(open));
-    if (open) (this._useCode() ? this.codeInput : this.keyInput).focus();
-  }
-
-  _useCode() {
-    return !this.authChoice.hidden && this.authChoice.querySelector('input[value="code"]').checked;
-  }
-
-  _showAuth() {
-    const code = this._useCode();
-    this.keyRow.hidden = code;
-    this.codeRow.hidden = !code;
-  }
-
-  _wake() {
+  async _wake() {
+    const accessCode = takeValue(this.codeInput);   // out of the field before anything else happens
     const memory = this.memory.checked;
-    const apiKey = takeValue(this.keyInput);
-    const accessCode = takeValue(this.codeInput);
-    if (this._useCode()) {
-      if (!accessCode) return this.setError("Type the access code first.");
+    await this.hostCheck;
+    if (this.host === "none") return this.setError("No mind is connected on this host.");
+    if (this.host === "code") {
+      if (!accessCode) {
+        this.codeInput.focus();
+        return this.setError("Type the access code first.");
+      }
       return this._run(() => this.handlers.onWake({ accessCode, memory }));
     }
-    if (!apiKey) return this.setError("Paste your Anthropic API key first.");
-    return this._run(() => this.handlers.onWake({ apiKey, memory }));
+    return this._run(() => this.handlers.onWake({ memory }));
   }
 
   // The model and the limits, from the same Config the session will use.
@@ -172,16 +181,32 @@ export class StartScreen {
     }
   }
 
-  // The access-code mode exists only when the host has turned it on.
-  async _accessCheck() {
-    try {
-      const response = await fetch("/api/mind", { headers: { accept: "application/json" } });
-      const data = response.ok ? await response.json() : null;
-      this.authChoice.hidden = data?.available !== true;
-    } catch {
-      this.authChoice.hidden = true;
-    }
-    this._showAuth();
+  // Ask the host whether it lends a mind, and shape "Wake a mind" to match.
+  _checkHost() {
+    this.hostCheck = (async () => {
+      let answer = null;
+      try {
+        const response = await fetch("/api/mind", { headers: { accept: "application/json" }, cache: "no-store" });
+        answer = response.ok ? await response.json() : null;
+      } catch {
+        answer = null;
+      }
+      this._showHost(hostMind(answer), hostNote(answer));
+    })();
+    return this.hostCheck;
+  }
+
+  _showHost(host, note) {
+    this.host = host;
+    const none = host === "none";
+    this.codeRow.hidden = host !== "code";
+    this.noMind.hidden = !none;
+    if (note.noMind) this.noMind.textContent = note.noMind;
+    this.budget.hidden = !note.budget;
+    this.budget.textContent = note.budget ?? "";
+    this.wakeNote.hidden = none;
+    this.later.hidden = none;
+    this.wakeButton.disabled = none;
   }
 
   async _noteState() {

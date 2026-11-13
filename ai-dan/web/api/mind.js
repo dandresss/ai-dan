@@ -5,13 +5,20 @@
 // LAB_ACCESS_CODE. It forwards only this lab's requests: the system prompt
 // must be the lab's, the model, tools and settings are always the server's
 // own, and the conversation is rebuilt block by block from the fields the
-// harness writes. Anyone holding the code can still spend the host's key, so
-// give the code only to people you trust and set a spend limit on the key.
+// harness writes. Anyone holding the code can spend the host's key, so the
+// key should come from a Claude Console workspace with a monthly spend limit:
+// Anthropic enforces that, whatever happens here. If the project also has a
+// Redis store attached, this function keeps its own count across all sessions
+// and stops at LIMIT_USD (api/_spend.js).
+//
+// Its local twin is lab/web.py (`uv run main.py`): the same checks, no code.
+// tests/fixtures/proxy_cases.json holds the answers both must give.
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import { Config } from "../lab/config.js";
 import { systemPrompt, text, toolDefinitions } from "../lab/mind.js";
 import { requestBody } from "../lab/model.js";
+import { LIMIT_USD, costOf, dollars, hasStore, priced, reserve, settle, spent, worstCase } from "./_spend.js";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const MAX_REQUEST_BYTES = 2_000_000;   // a full 40-turn history stays well under this
@@ -26,9 +33,22 @@ const FAILED_LIMIT = 10;
 const FAILED_WINDOW_MS = 10 * 60_000;
 const failures = new Map();
 
-export function GET() {
-  return json(200, { available: configured() });
+// On Vercel a mind always needs the access code: the key is the host's money.
+export async function GET() {
+  if (!configured()) return json(200, { available: false, code: true });
+  if (!hasStore()) return json(200, { available: true, code: true });   // the Console limit is the cap
+  const limit = { limit_usd: LIMIT_USD };
+  try {
+    const used = await spent();
+    const available = used < LIMIT_USD * 1_000_000;
+    return json(200, { available, code: true, ...limit, spent_usd: dollars(used), ...(available ? {} : { reason: SPENT }) });
+  } catch {
+    return json(200, { available: false, code: true, ...limit, reason: NO_STORE });
+  }
 }
+
+const SPENT = `This host has spent its $${LIMIT_USD} limit on the mind, so the mind stays asleep.`;
+const NO_STORE = "This host cannot count what the mind spends, so the mind stays asleep.";
 
 export async function POST(request) {
   if (!configured()) return error(404, "not_found_error", "The access-code mode is off on this host.");
@@ -55,6 +75,17 @@ export async function POST(request) {
   const checked = labRequest(body);
   if (typeof checked === "string") return error(400, "invalid_request_error", checked);
 
+  // The count in code, when a store is attached: reserve the most this request
+  // can cost, or send nothing. A store that is attached but failing stops the mind.
+  const counting = hasStore();
+  if (counting && !priced(checked.model)) return error(403, "permission_error", "This host has no price for that model.");
+  const reserved = counting ? worstCase(checked) : 0;
+  try {
+    if (counting && !(await reserve(reserved))) return error(402, "spend_limit_error", SPENT);
+  } catch {
+    return error(403, "permission_error", NO_STORE);
+  }
+
   // Stop the upstream request when the browser gives up, so it is not billed for nothing.
   const signal = AbortSignal.any([AbortSignal.timeout(UPSTREAM_TIMEOUT_MS), request.signal].filter(Boolean));
   try {
@@ -68,11 +99,25 @@ export async function POST(request) {
       body: JSON.stringify(checked),
       signal,
     });
-    return new Response(await upstream.text(), {
+    const answer = await upstream.text();
+    // An error answer is not billed. A success is charged what its usage says;
+    // without usage, the reservation stands.
+    let actual = 0;
+    if (upstream.ok) {
+      try {
+        const usage = JSON.parse(answer).usage;
+        actual = usage ? costOf(checked.model, usage) : reserved;
+      } catch {
+        actual = reserved;
+      }
+    }
+    if (counting) await settle(reserved, actual).catch(() => {});   // if the store fails here, the reservation stands
+    return new Response(answer, {
       status: upstream.status,
       headers: { "content-type": "application/json", "cache-control": "no-store" },
     });
   } catch (exc) {
+    // Sent but no answer: it may still be billed, so the reservation stands.
     const timedOut = exc?.name === "TimeoutError";
     return error(timedOut ? 504 : 502, "api_error",
       timedOut ? "The model took too long to answer." : "The host could not reach the model.");
@@ -87,7 +132,7 @@ export function labRequest(body) {
   const memory = Array.isArray(body.tools) && body.tools.some((tool) => tool?.name === "remember");
   const config = new Config({ MEMORY_ENABLED: memory });
   if (!isLabPrompt(config, body.system)) return "That is not this lab's system prompt.";
-  const messages = labMessages(body.messages, config);
+  const messages = labMessages(body.messages);
   if (!messages) return "The conversation is not this lab's.";
   return requestBody(config, body.system, toolDefinitions(config), messages);
 }
@@ -108,15 +153,14 @@ function isLabPrompt(config, system) {
  * block may have, so nothing else (images, cache settings, documents) gets
  * through. Null if anything does not fit.
  */
-function labMessages(messages, config) {
+function labMessages(messages) {
   if (!Array.isArray(messages) || messages.length === 0) return null;
-  const tools = new Set(toolDefinitions(config).map((tool) => tool.name));
   const out = [];
   for (const message of messages) {
     if (!isObject(message) || !Array.isArray(message.content) || message.content.length === 0) return null;
     const rebuild = message.role === "user" ? userBlock : message.role === "assistant" ? assistantBlock : null;
     if (!rebuild) return null;
-    const content = message.content.map((block) => (isObject(block) ? rebuild(block, tools) : null));
+    const content = message.content.map((block) => (isObject(block) ? rebuild(block) : null));
     if (content.includes(null)) return null;
     out.push({ role: message.role, content });
   }
@@ -131,7 +175,7 @@ function userBlock(block) {
   return null;
 }
 
-function assistantBlock(block, tools) {
+function assistantBlock(block) {
   switch (block.type) {
     case "text":
       return isText(block.text) ? { type: "text", text: block.text } : null;
@@ -151,6 +195,7 @@ function assistantBlock(block, tools) {
 
 /** A wake message: {"t": seconds} and, when the person spoke, "heard". */
 function isWake(words) {
+  if (typeof words !== "string") return false;
   let wake;
   try {
     wake = JSON.parse(words);

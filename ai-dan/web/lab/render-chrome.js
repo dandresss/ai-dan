@@ -140,6 +140,7 @@ export function mindStatus(obs, t, view) {
     return ["awake", AWAKE, `${obs.callsThisTurn} call${obs.callsThisTurn !== 1 ? "s" : ""} this turn`];
   }
   if (obs.status === "asleep") {
+    if (obs.lastTurnFailed && hostRefusal(obs.lastError)) return ["asleep", WARN, "the host's spending limit is reached"];
     if (obs.lastTurnFailed) return ["asleep", WARN, "the model did not answer; it tries again at the next wake"];
     const pulse = obs.header?.config?.PULSE_S;
     const every = typeof pulse === "number" || typeof pulse === "boolean"
@@ -193,6 +194,12 @@ export function drawSaid(ctx, lay, view, measure) {
 /** A dry run, or a replay of one: it must never pass for an AI. */
 export function isWiringTest(view) {
   return view.mode === "dryrun" || view.observer.mind === "scripted";
+}
+
+/** The host's own words when it will not pay for the mind (HTTP 402), or null. */
+export function hostRefusal(error) {
+  const match = /^HTTP 402: ([\s\S]+)$/.exec(String(error ?? "").trim());
+  return match ? match[1].trim() : null;
 }
 
 /** The banner shows once the mind has failed: twice in a row, or once with
@@ -259,14 +266,19 @@ export function drawBanners(ctx, lay, snap, view, measure) {
   if (view.mode === "nokey") {
     const lines = [
       [font("sans", 15 * u), "No mind is connected. The body is here, but nothing will wake in it: "
-        + (view.nokeyDetail || "no key was given."), TEXT],
+        + (view.nokeyDetail || "the mind could not be started."), TEXT],
       [font("sans", 13 * u), "Go back to the start to try again, or to watch the first waking.", TEXT_DIM],
     ];
     top = linesBox(ctx, measure, lay, lines, cx, top, { accent: [52, 52, 60],
       maxW: intOf(Math.min(lay.room.w - 40, 760 * u)) }).bottom + intOf(10 * u);
   }
 
-  if (mindFailing(obs)) {
+  const refusal = mindFailing(obs) ? hostRefusal(obs.lastError) : null;
+  if (refusal) {
+    // The host has stopped paying for the mind: its own reason, plainly, no error code.
+    linesBox(ctx, measure, lay, [[font("sans", 14 * u), `${refusal} The body is fine and keeps going.`, WARN]],
+      cx, top, { accent: mix(BLACK, WARN, 0.6) });
+  } else if (mindFailing(obs)) {
     const n = obs.errorsInARow;
     const lines = [
       [font("sans", 14 * u), `The mind cannot be reached right now (${n} failed attempt${n !== 1 ? "s" : ""}). `
@@ -274,7 +286,7 @@ export function drawBanners(ctx, lay, snap, view, measure) {
       [font("mono", 13 * u), (obs.lastError || "").slice(0, 300), TEXT_DIM],
     ];
     if (/HTTP 40[13]\b|x-api-key|authentication|access code/i.test(obs.lastError || "")) {
-      lines.push([font("sans", 13 * u), "The key or access code was not accepted. End the session and check it.", TEXT]);
+      lines.push([font("sans", 13 * u), "The host's key or the access code was not accepted.", TEXT]);
     }
     linesBox(ctx, measure, lay, lines, cx, top, { accent: mix(BLACK, WARN, 0.6) });
   }

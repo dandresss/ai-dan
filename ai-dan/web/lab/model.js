@@ -2,14 +2,12 @@
 //
 // AnthropicModel  the real one: one request per `respond`, no retries (the
 //                 harness owns retries), the API's own content blocks.
-//                 Direct from the browser with the visitor's key, or through
-//                 the host's /api/mind with an access code.
+//                 Always through the host (POST /api/mind), which holds the
+//                 key: a local Python server or the Vercel function.
 // ScriptedModel   a wiring test for the dry run: a fixed, mechanical pattern
 //                 that exercises every tool. It is not a mind and must not
 //                 look like one.
 import { thinkingParam } from "./mind.js";
-
-const API_URL = "https://api.anthropic.com/v1/messages";
 
 // A failed model request. `retryable` says whether trying again may help.
 export class ModelError extends Error {
@@ -39,11 +37,12 @@ function retryableStatus(code) {
 }
 
 export class AnthropicModel {
-  // auth is { apiKey } or { accessCode, endpoint = "/api/mind" }.
-  constructor(config, auth, { fetch, timeoutMs = 120000 } = {}) {
+  // The access code is optional: a local host asks for none.
+  constructor(config, { accessCode, endpoint = "/api/mind" } = {}, { fetch, timeoutMs = 120000 } = {}) {
     this.config = config;
     this.name = config.MODEL;
-    this.auth = auth;
+    this.accessCode = accessCode;
+    this.endpoint = endpoint;
     this.timeoutMs = timeoutMs;
     this.fetch = fetch ?? ((...args) => globalThis.fetch(...args));
     this.controller = null;
@@ -54,27 +53,9 @@ export class AnthropicModel {
     this.controller?.abort("cancelled");
   }
 
-  _target() {
-    const { apiKey, accessCode, endpoint = "/api/mind" } = this.auth;
-    if (apiKey) {
-      return {
-        url: API_URL,
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-      };
-    }
-    return {
-      url: endpoint,
-      headers: { "content-type": "application/json", "x-lab-access-code": accessCode },
-    };
-  }
-
   async respond(system, tools, messages) {
-    const { url, headers } = this._target();
+    const headers = { "content-type": "application/json" };
+    if (typeof this.accessCode === "string" && this.accessCode) headers["x-lab-access-code"] = this.accessCode;
     const body = JSON.stringify(requestBody(this.config, system, tools, messages));
     const controller = new AbortController();
     this.controller = controller;
@@ -82,7 +63,7 @@ export class AnthropicModel {
     try {
       let raw, response;
       try {
-        response = await this.fetch(url, { method: "POST", headers, body, signal: controller.signal });
+        response = await this.fetch(this.endpoint, { method: "POST", headers, body, signal: controller.signal });
         // Reading the body is still part of the request, so it stays under the timer.
         raw = await response.text();
       } catch (error) {
@@ -132,10 +113,10 @@ export class AnthropicModel {
     };
   }
 
-  // The key must never reach a log, even if a server echoes it back.
+  // The access code must never reach a log, even if a server echoes it back.
   _clean(message) {
-    const { apiKey } = this.auth;
-    return apiKey ? String(message).split(apiKey).join("[key]") : String(message);
+    const code = this.accessCode;
+    return code ? String(message).split(code).join("[code]") : String(message);
   }
 }
 

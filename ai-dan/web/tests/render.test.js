@@ -14,7 +14,8 @@ import {
 } from "../lab/render.js";
 import { FixedStep, HIDDEN_CATCH_UP, MAX_CATCH_UP, Pointer, STEP_S, keyAction } from "../lab/ui-loop.js";
 import { MAX_LINE, Session, cleanLine, notALog } from "../lab/ui-session.js";
-import { takeValue } from "../lab/ui-start.js";
+import { hostMind, hostNote, takeValue } from "../lab/ui-start.js";
+import { hostRefusal } from "../lab/render.js";
 
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/render.json", import.meta.url), "utf8"));
 const firstWake = readFileSync(new URL("../sessions/first-wake.jsonl", import.meta.url), "utf8")
@@ -467,11 +468,66 @@ test("a damaged log is called what it is", async () => {
   }
 });
 
-test("a secret is taken out of its field when it is read", () => {
-  const field = { value: "  sk-ant-example  " };
-  assert.equal(takeValue(field), "sk-ant-example");
+test("an access code is taken out of its field when it is read", () => {
+  const field = { value: "  open sesame  " };
+  assert.equal(takeValue(field), "open sesame");
   assert.equal(field.value, "");
   assert.equal(takeValue(field), "");
+});
+
+test("what the host offers decides how a mind is woken", () => {
+  assert.equal(hostMind({ available: true, code: false }), "open", "the local server: wake at once");
+  assert.equal(hostMind({ available: true }), "open");
+  assert.equal(hostMind({ available: true, code: true }), "code", "Vercel with a code: ask for it");
+  assert.equal(hostMind({ available: false, code: true }), "none");
+  assert.equal(hostMind({ available: "yes" }), "none");
+  assert.equal(hostMind(null), "none", "no answer, or a failed request");
+  assert.equal(hostMind(undefined), "none");
+});
+
+const SPENT = "This host has spent its $10 limit on the mind, so the mind stays asleep.";
+
+test("the start card says what the host may still spend, or why there is no mind", () => {
+  const still = "The first waking, the wiring test and session logs still work.";
+  assert.deepEqual(hostNote({ available: true, code: true, limit_usd: 10, spent_usd: 3.12 }),
+    { noMind: null, budget: "This host spends at most $10.00 on the mind; $6.88 is left." });
+  assert.deepEqual(hostNote({ available: true, code: true, limit_usd: 10, spent_usd: 11 }).budget,
+    "This host spends at most $10.00 on the mind; $0.00 is left.");
+  assert.deepEqual(hostNote({ available: true, code: true, limit_usd: 2.5 }).budget, "This host spends at most $2.50 on the mind.");
+  assert.deepEqual(hostNote({ available: true, code: false }), { noMind: null, budget: null }, "the local server: no limit line");
+  assert.deepEqual(hostNote({ available: false, code: true, limit_usd: 10, spent_usd: 10, reason: SPENT }),
+    { noMind: `${SPENT} ${still}`, budget: null });
+  assert.equal(hostNote({ available: false, code: true, limit_usd: 10,
+    reason: "This host cannot count what the mind spends, so the mind stays asleep." }).noMind,
+  `This host cannot count what the mind spends, so the mind stays asleep. ${still}`);
+  assert.equal(hostNote(null).noMind, `No mind is connected on this host, so a live session cannot start here. ${still}`);
+  assert.equal(hostNote({ available: false, reason: "  " }).noMind.startsWith("No mind is connected"), true);
+});
+
+test("a 402 from the host shows the host's reason, plainly", () => {
+  assert.equal(hostRefusal(`HTTP 402: ${SPENT}`), SPENT);
+  assert.equal(hostRefusal("HTTP 401: invalid x-api-key"), null);
+  assert.equal(hostRefusal(null), null);
+  const obs = observe([HEADER, WAKE, { type: "api_error", t: 0.5, turn: 1, attempt: 1, error: `HTTP 402: ${SPENT}` },
+    { type: "turn_end", t: 0.5, turn: 1, tool_calls: 0, capped: false, skipped: true }]);
+  assert.equal(mindFailing(obs), true, "not retried, so the banner shows at once");
+  assert.deepEqual(mindStatus(obs, 1, makeView({ observer: obs })), ["asleep", [236, 170, 84], "the host's spending limit is reached"]);
+  const ctx = fakeCanvas();
+  draw(ctx, snapOf(), makeView({ observer: obs, intro: 0 }), { width: 1280, height: 800, dpr: 1 });
+  const texts = ctx.ops.filter((op) => op[0] === "fillText").map((op) => op[1]).join(" ");
+  assert.match(texts, /This host has spent its \$10 limit on the mind, so the mind stays\s+asleep\. The body is fine/);
+  assert.doesNotMatch(texts, /HTTP 402|cannot be reached/, "no error code, no talk of a network");
+});
+
+test("the page never asks for an Anthropic key, and talks only to its own host", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /api[- ]?key|sk-ant|api\.anthropic\.com/i);
+  assert.deepEqual([...html.matchAll(/type="password"[^>]*/g)].length, 1, "one secret field: the access code");
+  assert.match(html, /id="access-code" type="password"/);
+  for (const file of ["app.js", "ui-start.js", "ui-session.js", "ui-loop.js"]) {
+    const js = readFileSync(new URL(`../lab/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(js, /apiKey|api\.anthropic\.com|https?:\/\//, file);
+  }
 });
 
 test("the first waking replays to its end with the same body states", async () => {
@@ -619,6 +675,10 @@ test("every scene draws without an error, on a desktop and on a phone", () => {
       if (view.panel && !view.clean) assert.ok(lay.panelInfo, `${name}: the panel was drawn`);
       if (name === "dryrun" || name === "clean") {
         assert.ok(ctx.ops.some((op) => op[0] === "fillText" && /not an AI/.test(op[1])), `${name}: labelled not an AI`);
+      }
+      if (name === "badKey" && width >= 844) {
+        assert.ok(ctx.ops.some((op) => op[0] === "fillText" && op[1] === "The host's key or the access code was not accepted."),
+          `${name} at ${width}x${height}: says the key or code was refused`);
       }
     }
   }

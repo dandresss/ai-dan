@@ -1,9 +1,11 @@
 """A body to wake up in: open the room.
 
-    uv run python main.py                  a live session (needs ANTHROPIC_API_KEY in .env)
-    uv run python main.py --dry-run        the whole loop with a scripted mind: a wiring test, not an AI
-    uv run python main.py --replay FILE    watch a recorded session again, without the API
-    uv run python main.py --verify FILE    check that a log replays to the same body states
+    uv run main.py                  the lab in a web page at http://localhost:8080 (a mind wakes
+                                    on the ANTHROPIC_API_KEY in .env)
+    uv run main.py --desktop        the desktop room: a live session in a window
+    uv run main.py --dry-run        the desktop room with a scripted mind: a wiring test, not an AI
+    uv run main.py --replay FILE    watch a recorded session again, without the API
+    uv run main.py --verify FILE    check that a log replays to the same body states
 """
 import sys
 

@@ -18,7 +18,7 @@ import { Observer, drawPanel } from "./render-panel.js";
 
 export { Observer } from "./render-panel.js";
 export { callLine, entryItems, playSummary } from "./render-panel.js";
-export { isWiringTest, mindFailing, mindStatus, statusY, tokenText, typingY } from "./render-chrome.js";
+export { hostRefusal, isWiringTest, mindFailing, mindStatus, statusY, tokenText, typingY } from "./render-chrome.js";
 export { clock } from "./render-base.js";
 
 const intOf = (v) => Math.trunc(v);

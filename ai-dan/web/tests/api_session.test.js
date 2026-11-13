@@ -10,6 +10,7 @@ import { Harness } from "../lab/harness.js";
 import { SessionLog } from "../lab/log.js";
 import { AnthropicModel } from "../lab/model.js";
 import { World } from "../lab/world.js";
+import { storeOff, storeOn, storeValue, withStore } from "./spend_store.js";
 
 const realFetch = globalThis.fetch;
 
@@ -17,6 +18,7 @@ afterEach(() => {
   globalThis.fetch = realFetch;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.LAB_ACCESS_CODE;
+  storeOff();
 });
 
 /** Answers like the Messages API: a turn opens with thinking and two calls, then ends. */
@@ -49,8 +51,9 @@ function standInApi(requests) {
 async function session(config, noteStore = null) {
   process.env.ANTHROPIC_API_KEY = "sk-test-server-key";
   process.env.LAB_ACCESS_CODE = "open sesame";
+  storeOn();
   const requests = [];
-  globalThis.fetch = standInApi(requests);
+  globalThis.fetch = withStore(standInApi(requests));
   const throughProxy = (url, init) => POST(new Request(new URL(url, "https://lab.example"), init));
   const model = new AnthropicModel(config, { accessCode: "open sesame" }, { fetch: throughProxy });
 
@@ -81,6 +84,8 @@ test("a first-day session passes the proxy on every request", async () => {
   assert.ok(wakes.some((wake) => wake.reasons.includes("voice")));
   assert.equal(requests.length, 2 * wakes.length);
   assert.ok(events.some((event) => event.type === "call" && event.name === "play" && event.result.ok));
+  // Each answer reported 100 tokens in and 20 out: $0.0004 at $2 and $10 per million.
+  assert.equal(storeValue(), requests.length * 400);
 });
 
 test("a later-days session with a note passes the proxy too", async () => {

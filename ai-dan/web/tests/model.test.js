@@ -9,7 +9,7 @@ import { AnthropicModel, ModelError, ScriptedModel, requestBody } from "../lab/m
 import { thinkingParam, toolDefinitions } from "../lab/mind.js";
 import { FakeWorld, assertValid } from "./harness_fakes.js";
 
-const KEY = "sk-ant-test-key-1234";
+const CODE = "open sesame";
 
 // A fetch that records what it was sent and answers with `reply`.
 function fakeFetch(reply) {
@@ -38,7 +38,8 @@ const message = {
   usage: { input_tokens: 120, output_tokens: 30 },
 };
 
-const direct = (fetch, options = {}) => new AnthropicModel(new Config(), { apiKey: KEY }, { fetch, ...options });
+const direct = (fetch, options = {}) =>
+  new AnthropicModel(new Config(), { accessCode: CODE }, { fetch, ...options });
 const ask = (model) => model.respond("sys", [{ name: "sense" }], [{ role: "user", content: "x" }]);
 
 // --- errors are sorted for retry -----------------------------------------------------
@@ -112,10 +113,10 @@ test("a non-JSON error body keeps its text", async () => {
     (error) => error.retryable && error.message.includes("Bad Gateway"));
 });
 
-test("the key never appears in an error", async () => {
-  for (const reply of [apiError(401, `invalid x-api-key ${KEY}`), new TypeError(`bad ${KEY}`)]) {
+test("the access code never appears in an error", async () => {
+  for (const reply of [apiError(401, `invalid x-api-key ${CODE}`), new TypeError(`bad ${CODE}`)]) {
     await assert.rejects(ask(direct(fakeFetch(reply))), (error) => {
-      assert.ok(!error.message.includes(KEY));
+      assert.ok(!error.message.includes(CODE));
       return true;
     });
   }
@@ -133,14 +134,9 @@ test("request shape and response", async () => {
   const result = await ask(direct(fetch));
   assert.equal(fetch.calls.length, 1);
   const { url, init, body } = fetch.calls[0];
-  assert.equal(url, "https://api.anthropic.com/v1/messages");
+  assert.equal(url, "/api/mind");
   assert.equal(init.method, "POST");
-  assert.deepEqual(init.headers, {
-    "content-type": "application/json",
-    "x-api-key": KEY,
-    "anthropic-version": "2023-06-01",
-    "anthropic-dangerous-direct-browser-access": "true",
-  });
+  assert.deepEqual(init.headers, { "content-type": "application/json", "x-lab-access-code": CODE });
   assert.deepEqual(body, {
     model: "claude-sonnet-5-5", max_tokens: 4096, system: "sys",
     tools: [{ name: "sense" }], messages: [{ role: "user", content: "x" }],
@@ -163,19 +159,23 @@ test("requestBody follows the config", () => {
   assert.deepEqual(body.thinking, { type: "between_tools" });
 });
 
-test("through the host: the access code, never a key", async () => {
+test("through the host: the code is sent only when there is one", async () => {
   const fetch = fakeFetch(json(200, message));
-  const model = new AnthropicModel(new Config(), { accessCode: "open sesame" }, { fetch });
-  const result = await ask(model);
-  const { url, init, body } = fetch.calls[0];
-  assert.equal(url, "/api/mind");
-  assert.deepEqual(init.headers, { "content-type": "application/json", "x-lab-access-code": "open sesame" });
-  assert.deepEqual(body, requestBody(new Config(), "sys", [{ name: "sense" }], [{ role: "user", content: "x" }]));
+  const result = await ask(new AnthropicModel(new Config(), {}, { fetch }));   // a local host asks for none
+  assert.equal(fetch.calls[0].url, "/api/mind");
+  assert.deepEqual(fetch.calls[0].init.headers, { "content-type": "application/json" });
+  assert.deepEqual(fetch.calls[0].body,
+    requestBody(new Config(), "sys", [{ name: "sense" }], [{ role: "user", content: "x" }]));
   assert.equal(result.output_tokens, 30);
 
-  const other = new AnthropicModel(new Config(), { accessCode: "a", endpoint: "/elsewhere" }, { fetch });
-  await ask(other);
-  assert.equal(fetch.calls[1].url, "/elsewhere");
+  await ask(new AnthropicModel(new Config(), { accessCode: "" }, { fetch }));
+  assert.ok(!("x-lab-access-code" in fetch.calls[1].init.headers));
+  await ask(new AnthropicModel(new Config(), undefined, { fetch }));
+  assert.equal(fetch.calls[2].url, "/api/mind");
+
+  await ask(new AnthropicModel(new Config(), { accessCode: "a", endpoint: "/elsewhere" }, { fetch }));
+  assert.equal(fetch.calls[3].url, "/elsewhere");
+  assert.equal(fetch.calls[3].init.headers["x-lab-access-code"], "a");
 });
 
 test("a refused access code is an error the harness will not retry", async () => {

@@ -40,7 +40,7 @@ web/                         Vercel project root ("Root Directory" = ai-dan/web)
     log.js          body     SessionLog (in memory), Feed, parseLog
     world.js        body     World, ReplayWorld, verifyLog, WorldClosed
     mind.js         mind     port of lab/mind.py (prompt, texts, tools, the note)
-    model.js        mind     AnthropicModel (direct or through api/mind.js), ScriptedModel
+    model.js        mind     AnthropicModel (through the host's /api/mind), ScriptedModel
     harness.js      mind     port of lab/harness.py, async
     render.js       ui       port of lab/render.py to a 2D canvas: layout, room, pins, person
     render-base.js  ui       palette, fonts, wrapping, Python number formats
@@ -201,7 +201,7 @@ export function requestBody(config, system, tools, messages)
     // the Messages API body the Python AnthropicModel sends:
     // {model, max_tokens, system, tools, messages, thinking, output_config: {effort}}
 export class AnthropicModel {
-  constructor(config, { apiKey } | { accessCode, endpoint = "/api/mind" }, { fetch, timeoutMs = 120000 } = {})
+  constructor(config, { accessCode, endpoint = "/api/mind" } = {}, { fetch, timeoutMs = 120000 } = {})
   name                                   // config.MODEL
   async respond(system, tools, messages) // -> {content, stop_reason, model, input_tokens, output_tokens}
   abort()                                // cancels a request in flight
@@ -209,16 +209,14 @@ export class AnthropicModel {
 export class ScriptedModel               // port of the Python wiring test; name "scripted"
 ```
 
-With `apiKey` the browser calls `https://api.anthropic.com/v1/messages`
-directly (headers `x-api-key`, `anthropic-version: 2023-06-01`,
-`anthropic-dangerous-direct-browser-access: true`). The key goes nowhere
-else, is never logged and never stored. With `accessCode` it posts the same
-body to `api/mind.js` with header `x-lab-access-code`; the server checks it
-and forwards with the owner's key. The response JSON is the API's own, and
-content blocks are echoed back unchanged within a turn. Errors are sorted as
-in Python's `wrap_error`: network failure, 429, 408, 409 and 5xx are
-retryable; a timeout and any other 4xx are not. The message keeps the API's
-error text, never the key.
+The page never holds an Anthropic key and never asks for one. Every model
+request is the Messages API body, posted to the host's `/api/mind`, which
+checks it and forwards it with the host's key. With an `accessCode` the
+request carries header `x-lab-access-code`; without one it carries none. The
+response JSON is the API's own, and content blocks are echoed back unchanged
+within a turn. Errors are sorted as in Python's `wrap_error`: network
+failure, 429, 408, 409 and 5xx are retryable; a timeout and any other 4xx
+are not. The message keeps the API's error text, never the code.
 
 `harness.js`: `new Harness(world, model, config, { noteStore = null,
 retryWaits = [2, 4, 8], sleep })`, `start({ runLoop = true })`,
@@ -248,8 +246,8 @@ property of a pin comes from that pin's real height and the body's colour,
 and from nothing else.
 
 Modes, as on the desktop: `replay` (the bundled first session, or a log file
-the visitor opens or drops on the page), `live` (a mind, with the visitor's
-key or the host's access code), `dryrun` (the wiring test, labelled "not an
+the visitor opens or drops on the page), `live` (a mind on the host's key,
+with the access code if the host asks for one), `dryrun` (the wiring test, labelled "not an
 AI" wherever the desktop labels it). A live or dry-run session can be
 downloaded as its JSONL log at any time and when it ends.
 
@@ -261,15 +259,28 @@ instead, which browsers wake as seldom as once a minute, so each wake
 catches simulation time up with the wall clock, up to 60 s at a time. A
 replay pauses.
 
-`GET /api/mind` answers `{"available": true|false}`: whether the host has
-turned on the access-code mode. When it is off, or the request fails, the
-start screen offers only the visitor's own key.
+`GET /api/mind` answers `{"available": bool, "code": bool}`: whether a mind
+can wake on this host, and whether it needs the access code. When nothing is
+available, or the request fails, "Wake a mind" says plainly that no mind is
+connected here; replays and the wiring test still work.
 
 ## Hosting
 
-Vercel, free tier, project Root Directory `ai-dan/web`, no build step.
-Static files are served as they are; `api/mind.js` is the only function.
-Every push to `main` deploys to production; other branches get previews.
+Two hosts serve the same page and answer `/api/mind` the same way.
+
+- **This machine:** `uv run main.py` runs `../lab/web.py`. It serves this
+  folder at http://localhost:8080 with the deploy's headers and forwards the
+  mind's requests with the `ANTHROPIC_API_KEY` in `../.env`. It needs no
+  access code (`{"available": true, "code": false}`), because it listens on
+  the loopback addresses only and refuses requests whose `Host` or `Origin`
+  is not this machine's page, so another web site cannot spend the key.
+- **Vercel:** free tier, project Root Directory `ai-dan/web`, no build step.
+  Static files are served as they are; `api/mind.js` is the only function.
+  Every push to `main` deploys to production; other branches get previews.
+
+The two are twins: `tests/fixtures/proxy_cases.json` records what
+`api/mind.js` makes of 44 requests, and `../tests/test_web_server.py` checks
+that `lab/web.py` gives the same answers.
 
 The access-code mode is off unless the owner sets both `ANTHROPIC_API_KEY`
 and `LAB_ACCESS_CODE` in the Vercel project. The function only forwards
@@ -288,6 +299,25 @@ requests that are this lab's:
 - When the browser gives up, the request to the API is cancelled.
 
 Anyone who holds the code can still spend the key, one lab-shaped request at
-a time: share it only with people you trust, and give the key a spend limit
-in the Anthropic Console. `tests/api_session.test.js` runs whole sessions
-through the function to show the harness's own requests always pass.
+a time: share it only with people you trust. `tests/api_session.test.js` runs
+whole sessions through the function to show the harness's own requests
+always pass.
+
+Spending has two limits.
+
+- **The hard limit is the Console's.** The key should come from a Claude
+  Console workspace with a monthly spend limit, and Anthropic enforces it
+  whatever this code does.
+- **The count in code is `api/_spend.js`, when a Redis store (Upstash) is
+  attached.** Before sending, each request reserves its worst case: its byte
+  size bounds its input tokens, `max_tokens` bounds its output, and both are
+  priced at the dearest rates. If the total would pass `LIMIT_USD` ($10), the
+  request is refused with a 402. When the answer arrives, the reservation is
+  replaced by the cost from its `usage`. An error answer costs nothing, and an
+  answer that never arrived keeps its reservation. The total moves only by
+  atomic `INCRBY`, so simultaneous requests cannot overshoot it
+  (`tests/spend.test.js`).
+
+Without a store there is no count. A store that is attached but failing
+stops the mind. `GET /api/mind` then adds `limit_usd`, `spent_usd` and a
+`reason`, and the start screen shows how much is left.

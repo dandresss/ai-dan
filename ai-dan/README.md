@@ -18,29 +18,42 @@ You need [uv](https://docs.astral.sh/uv/). It fetches Python and the three packa
 Then, in this folder:
 
 ```
-uv run python main.py
+uv run main.py
 ```
 
-To wake a mind, copy `.env.example` to `.env` and put your Anthropic API key after `ANTHROPIC_API_KEY=`. The file stays on your machine and is ignored by git.
+That opens the lab in your browser at http://localhost:8080. To wake a mind, copy `.env.example` to `.env` and put your Anthropic API key after `ANTHROPIC_API_KEY=`. The page never asks for a key: this machine's server sends the mind's requests to Anthropic with the one in `.env`. The file stays on your machine and is ignored by git, and the server answers only pages from this machine.
 
-Without a key the room still opens, and says plainly that no mind is connected. Two things work with no key:
+Without a key the page still opens and says plainly that no mind is connected. **Watch the first waking** plays back the first live session, 34 seconds long: a real mind, with a scripted visitor standing in for the person. **Wiring test** runs the whole loop with a scripted stand-in, labelled as not an AI.
 
-- `uv run python main.py --replay docs/first-wake.jsonl` plays back the first live session, 34 seconds long: a real mind, with a scripted visitor standing in for the person. Press Tab to read what it thought.
-- `uv run python main.py --dry-run` runs the whole loop with a scripted stand-in. It is a wiring test, labelled on screen as not an AI, and the analysis never counts it.
+The desktop room, a window of its own, is the instrument for the experiment:
+
+```
+uv run main.py --desktop
+```
 
 ## In a web page
 
-The same lab runs in a browser, from `web/`: **[ai-dan-web.vercel.app](https://ai-dan-web.vercel.app)**. It is a port to plain JavaScript, not a lookalike. Every desktop session log replays there to the same body states, and a log downloaded from the page passes `--verify` and `lab.analyze` here. `web/ARCHITECTURE.md` explains how.
+The web lab lives in `web/`. It is a port of the desktop lab to plain JavaScript, not a lookalike. Every desktop session log replays there to the same body states, and a log downloaded from the page passes `--verify` and `lab.analyze` here. `web/ARCHITECTURE.md` explains how.
 
-- **Watch the first waking** replays `docs/first-wake.jsonl`. No key needed.
-- **Wake a mind** needs the visitor's own Anthropic API key. The key goes from their browser straight to api.anthropic.com and is not stored. If the host turns on the access-code mode, a visitor with the code can use the host's key instead.
+- **Watch the first waking** replays `docs/first-wake.jsonl`.
+- **Wake a mind** starts a live session on the host's key, if the host has one.
 - **Wiring test** is the scripted stand-in. **Open a session log** replays any `.jsonl`.
 
-It is hosted on Vercel's free tier. The project's Root Directory is `ai-dan/web`, there is no build step, and every push to `main` deploys. To run it locally, serve the folder: `cd web` then `python -m http.server`. Its tests need Node: `cd web` then `npm test`.
+There are two hosts:
 
-The access-code mode is off by default. To turn it on, set both `ANTHROPIC_API_KEY` and `LAB_ACCESS_CODE` in the Vercel project's environment variables, then redeploy. Every session then runs on that key. `api/mind.js` forwards only this lab's prompt, tools, settings and conversation shape, but anyone with the code can still spend the key. Share the code only with people you trust, and set a spend limit on the key in the Anthropic Console.
+- **This machine.** `uv run main.py` serves the page and `/api/mind` (`lab/web.py`) and uses the key in `.env`. No access code is needed.
+- **Vercel.** The page is public at **[ai-dan-web.vercel.app](https://ai-dan-web.vercel.app)**. It runs on the free tier, with Root Directory `ai-dan/web` and no build step, and every push to `main` deploys it. There `/api/mind` is `web/api/mind.js`, with `ANTHROPIC_API_KEY` and `LAB_ACCESS_CODE` set in the Vercel project's environment variables. Visitors are never asked for an API key; to wake a mind they type the code, so share it only with people you trust.
+
+Spending has two limits:
+
+- **The hard one, in the Claude Console.** Create a workspace with a monthly spend limit, for example $10. You can't set one on the Default workspace. Use an API key made in that workspace, here and on Vercel; keys can't move between workspaces. Anthropic stops the key at the limit, whatever the code does.
+- **An optional count in code** (`web/api/_spend.js`). Attach a free Upstash Redis store to the Vercel project, under Storage. The function then adds up what every session costs, from the API's own usage figures, and stops at `LIMIT_USD` ($10) in all, across all sessions. Without a store there is no count, and the Console limit is the cap.
+
+Both hosts forward only this lab's prompt, tools, settings and conversation shape, and give the same answers to the same requests (`web/tests/fixtures/proxy_cases.json`). The web tests need Node: `cd web` then `npm test`.
 
 ## In the room
+
+On the desktop. The web page works the same way, with buttons for help, hiding text and fullscreen.
 
 | You | How |
 |---|---|
@@ -65,12 +78,13 @@ Nothing on screen moves unless the body's state says so. A pin's brightness is i
 
 | Command | What it does |
 |---|---|
-| `uv run python main.py` | A live session. Writes `sessions/<date>_<time>.jsonl`. |
-| `uv run python main.py --memory` | Later-days mode: the mind gets `remember` and reads the note it left last time. |
-| `uv run python main.py --model NAME` | Wake a different model. |
-| `uv run python main.py --dry-run` | The scripted wiring test. |
-| `uv run python main.py --replay FILE [--speed N]` | Watch a session again. Space pauses. |
-| `uv run python main.py --verify FILE` | Replay with no window and check that the body ends up in the same states. |
+| `uv run main.py [--port N] [--no-browser]` | The web lab at http://localhost:8080, with a mind on the key in `.env`. |
+| `uv run main.py --desktop` | A live session in the desktop room. Writes `sessions/<date>_<time>.jsonl`. |
+| `uv run main.py --desktop --memory` | Later-days mode: the mind gets `remember` and reads the note it left last time. |
+| `uv run main.py --desktop --model NAME` | Wake a different model. |
+| `uv run main.py --dry-run` | The scripted wiring test, in the desktop room. |
+| `uv run main.py --replay FILE [--speed N]` | Watch a session again in the desktop room. Space pauses. |
+| `uv run main.py --verify FILE` | Replay with no window and check that the body ends up in the same states. |
 | `uv run python -m lab.analyze [FILES or FOLDERS]` | The success criterion from `mind.md`, computed from logs. Defaults to `sessions/`. |
 | `uv run python -m lab.shot all shots/` | Render the window's canned scenes to PNG. |
 | `uv run pytest` | The tests. |
@@ -81,7 +95,7 @@ Any parameter in `lab/config.py` can be set in `.env` as `LAB_<NAME>`, for examp
 
 `mind.md` asks for 10 first-day sessions with the same configuration, the person following the same script each time.
 
-1. Run `uv run python main.py` ten times. Follow the script in `mind.md` and let each session end by itself, at 40 turns or 15 minutes.
+1. Run `uv run main.py --desktop` ten times. Follow the script in `mind.md` and let each session end by itself, at 40 turns or 15 minutes.
 2. Run `uv run python -m lab.analyze`.
 
 A session counts only if it had a live mind, memory was off, the model answered at least once, and it ran to its own limit. Sessions with identical configuration, prompt and model form a batch, and the reading (emerges consistently, sometimes, or not) is given for a batch of exactly 10. The script lists candidates for the two observations that need a human reader, with their line numbers in the log, and leaves the yes or no to you.
@@ -101,6 +115,7 @@ mind ── harness.py ◀── wakes ── events ─────────
 | File | Spec | What it is |
 |---|---|---|
 | `main.py` | | The entry point |
+| `lab/web.py` | | The web lab served from this machine, and its `/api/mind` |
 | `lab/display.py` | `shape-display.md` | Pins, speed limit, response delay, touch, deviation trace |
 | `lab/nervous.py` | `nervous-system.md` | Tracks to ordered heights; plain loops, written to be ported to the board |
 | `lab/contract.py` | `body-contract.md` | The four tools, validation, error messages |

@@ -7,6 +7,7 @@ import { GET, POST, labRequest } from "../api/mind.js";
 import { Config } from "../lab/config.js";
 import { systemPrompt, text, toolDefinitions } from "../lab/mind.js";
 import { requestBody } from "../lab/model.js";
+import { storeOff, storeOn, withStore } from "./spend_store.js";
 
 const realFetch = globalThis.fetch;
 let forwarded;
@@ -15,21 +16,24 @@ beforeEach(() => {
   forwarded = [];
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.LAB_ACCESS_CODE;
-  globalThis.fetch = async (url, init) => {
+  storeOff();
+  globalThis.fetch = withStore(async (url, init) => {
     forwarded.push({ url, init });
     return new Response(JSON.stringify({ content: [], stop_reason: "end_turn" }), { status: 200 });
-  };
+  });
 });
 
 afterEach(() => {
   globalThis.fetch = realFetch;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.LAB_ACCESS_CODE;
+  storeOff();
 });
 
 function turnOn() {
   process.env.ANTHROPIC_API_KEY = "sk-test-server-key";
   process.env.LAB_ACCESS_CODE = "open sesame";
+  storeOn();
 }
 
 function labBody(config = new Config(), note = null) {
@@ -46,9 +50,9 @@ function post(body, code = "open sesame") {
 }
 
 test("GET says whether the access-code mode is on", async () => {
-  assert.deepEqual(await (await GET()).json(), { available: false });
+  assert.deepEqual(await (await GET()).json(), { available: false, code: true });
   turnOn();
-  assert.deepEqual(await (await GET()).json(), { available: true });
+  assert.deepEqual(await (await GET()).json(), { available: true, code: true, limit_usd: 10, spent_usd: 0 });
 });
 
 test("off unless both the key and the code are set", async () => {
@@ -196,8 +200,8 @@ test("bad JSON and oversized requests are refused", async () => {
 
 test("the API's own error passes through with its status", async () => {
   turnOn();
-  globalThis.fetch = async () => new Response(
-    JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }), { status: 529 });
+  globalThis.fetch = withStore(async () => new Response(
+    JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }), { status: 529 }));
   const response = await post(labBody());
   assert.equal(response.status, 529);
   assert.equal((await response.json()).error.message, "Overloaded");
@@ -205,6 +209,13 @@ test("the API's own error passes through with its status", async () => {
 
 test("an unreachable API is a retryable 5xx", async () => {
   turnOn();
-  globalThis.fetch = async () => { throw new TypeError("fetch failed"); };
+  globalThis.fetch = withStore(async () => { throw new TypeError("fetch failed"); });
   assert.equal((await post(labBody())).status, 502);
+});
+
+test("proxy_cases.json is current: the local twin (lab/web.py) is tested against it", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { proxyCases } = await import("./fixtures/make_proxy_cases.js");
+  const saved = readFileSync(new URL("./fixtures/proxy_cases.json", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  assert.equal(saved, proxyCases(), "run: node tests/fixtures/make_proxy_cases.js");
 });

@@ -1,9 +1,11 @@
 """Open the room. `main.py` at the project root calls this.
 
-    uv run python main.py                  a live session (needs ANTHROPIC_API_KEY in .env)
-    uv run python main.py --dry-run        the whole loop with a scripted mind: a wiring test, not an AI
-    uv run python main.py --replay FILE    watch a recorded session again, without the API
-    uv run python main.py --verify FILE    check that a log replays to the same body states
+    uv run main.py                  the lab in a web page at http://localhost:8080; a mind wakes
+                                    on the ANTHROPIC_API_KEY in .env
+    uv run main.py --desktop        the desktop room: a live session in a window
+    uv run main.py --dry-run        the desktop room with a scripted mind: a wiring test, not an AI
+    uv run main.py --replay FILE    watch a recorded session again in the desktop room, without the API
+    uv run main.py --verify FILE    check that a log replays to the same body states
 """
 from __future__ import annotations
 
@@ -14,12 +16,14 @@ from pathlib import Path
 
 
 def _parse(argv):
-    ap = argparse.ArgumentParser(prog="uv run python main.py", description="A body to wake up in: the virtual lab.",
+    ap = argparse.ArgumentParser(prog="uv run main.py", description="A body to wake up in: the virtual lab. "
+                                 "With no options it opens the lab in a web page at http://localhost:8080.",
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
-                                 epilog="keys: Tab observer panel, F1 help, F2 hide text, F11 fullscreen, Esc quit")
+                                 epilog="desktop keys: Tab observer panel, F1 help, F2 hide text, F11 fullscreen, Esc quit")
     mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--desktop", action="store_true", help="a live session in the desktop room instead of the web page")
     mode.add_argument("--dry-run", action="store_true",
-                      help="run the whole loop with a scripted mind (a wiring test, not an AI)")
+                      help="the desktop room with a scripted mind (a wiring test, not an AI)")
     mode.add_argument("--replay", metavar="FILE", help="replay a session log, without the API")
     mode.add_argument("--verify", metavar="FILE", help="replay a log headlessly and check the body states")
     ap.add_argument("--speed", type=float, default=1.0, help="replay speed (default 1)")
@@ -30,7 +34,17 @@ def _parse(argv):
     ap.add_argument("--visitor", action="store_true",
                     help="a scripted person instead of the mouse, for headless tests")
     ap.add_argument("--size", default="1280x800", help="window size, WIDTHxHEIGHT")
-    return ap.parse_args(argv)
+    ap.add_argument("--port", type=int, default=8080, help="web page: the port on localhost (default 8080)")
+    ap.add_argument("--no-browser", action="store_true", help="web page: do not open the browser")
+    args = ap.parse_args(argv)
+    desktop_only = [flag for flag, used in (("--memory", args.memory), ("--model", args.model),
+                                            ("--frames", args.frames is not None), ("--shot", args.shot),
+                                            ("--visitor", args.visitor), ("--speed", args.speed != 1.0))
+                    if used]
+    if desktop_only and not (args.desktop or args.dry_run or args.replay or args.verify):
+        ap.error(f"{', '.join(desktop_only)} belong to the desktop room: add --desktop "
+                 "(in the web page, later-days mode is a switch under Wake a mind)")
+    return args
 
 
 def _shown(path: Path) -> str:
@@ -129,7 +143,10 @@ def main(argv=None) -> int:
         return verify(args.verify)
     if args.replay:
         return replay(args)
-    return live(args)
+    if args.desktop or args.dry_run:
+        return live(args)
+    from .web import serve
+    return serve(args.port, open_browser=not args.no_browser)
 
 
 if __name__ == "__main__":

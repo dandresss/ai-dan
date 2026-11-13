@@ -51,40 +51,29 @@
       <p>34 seconds of the first live session: a real mind, with a scripted visitor. <b>Observer</b> shows what it thought.</p>
     </section>
 
-    <section class="choice">
-      <button type="button" id="wake-open" class="go" aria-expanded="false" aria-controls="wake-form">Wake a mind</button>
+    <form id="wake-form" class="choice wake" autocomplete="off">
+      <button type="submit" id="wake-go" class="go live">Wake a mind</button>
       <p>A live session. You are the person in the room: move, touch a pin, type to speak.</p>
-      <form id="wake-form" class="wake" hidden>
-        <fieldset id="auth-choice" class="auth-choice" hidden>
-          <legend>How it reaches the model</legend>
-          <label><input type="radio" name="auth" value="key" checked> My Anthropic API key</label>
-          <label><input type="radio" name="auth" value="code"> An access code from the host</label>
-        </fieldset>
-        <div id="key-row" class="field">
-          <label for="api-key">Your Anthropic API key</label>
-          <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
-          <p class="small">The key is sent only to api.anthropic.com, straight from this browser. It is never stored: the field empties when the session starts, and the page keeps the key only for that session. You pay for the tokens the mind uses.</p>
-        </div>
-        <div id="code-row" class="field" hidden>
-          <label for="access-code">Access code</label>
-          <input id="access-code" type="password" autocomplete="off" spellcheck="false">
-          <p class="small">The mind's requests go through this site, which sends them on with the host's key.</p>
-        </div>
-        <p class="small">Model <code id="model-name">claude-sonnet-5-5</code>. The status line counts the tokens as they are used; the 34-second first waking used 21,637 in and 896 out. A session ends by itself after <span id="limits">40 turns or 15 minutes</span>, or when you end it.</p>
-        <details id="later-days" class="later">
-          <summary>Later-days mode</summary>
-          <label><input type="checkbox" id="memory"> Memory across sessions</label>
-          <p class="small">The mind gets a <code>remember</code> tool and reads the note it left last time. The note is kept in this browser's local storage and nowhere else.</p>
-          <p class="small" id="note-state"></p>
-          <button type="button" id="forget-note" class="small-button" hidden>Forget the note</button>
-        </details>
-        <button type="submit" id="wake-go" class="go">Wake it</button>
-      </form>
-    </section>
+      <div id="code-row" class="field span" hidden>
+        <label for="access-code">Access code</label>
+        <input id="access-code" type="password" autocomplete="off" spellcheck="false">
+        <p class="small">This host asks for a code before the mind can use its key.</p>
+      </div>
+      <p id="wake-note" class="small span">The mind runs on this host's Anthropic key, as <code id="model-name">claude-sonnet-5-5</code>. The status line counts the tokens it uses; the 34-second first waking used 21,637 in and 896 out. A session ends by itself after <span id="limits">40 turns or 15 minutes</span>, or when you end it.</p>
+      <p id="budget" class="small span" hidden></p>
+      <p id="no-mind" class="small span no-mind" hidden>No mind is connected on this host, so a live session cannot start here. The first waking, the wiring test and session logs still work.</p>
+      <details id="later-days" class="later span">
+        <summary>Later-days mode</summary>
+        <label><input type="checkbox" id="memory"> Memory across sessions</label>
+        <p class="small">The mind gets a <code>remember</code> tool and reads the note it left last time. The note is kept in this browser's local storage and nowhere else.</p>
+        <p class="small" id="note-state"></p>
+        <button type="button" id="forget-note" class="small-button" hidden>Forget the note</button>
+      </details>
+    </form>
 
     <section class="choice">
       <button type="button" id="dryrun" class="go warn">Wiring test <span class="pill">not an AI</span></button>
-      <p>The whole loop with a scripted stand-in, to see the room work. No key, and no AI.</p>
+      <p>The whole loop with a scripted stand-in, to see the room work. It sends nothing anywhere, and it is not an AI.</p>
     </section>
 
     <section class="choice" id="drop">

@@ -203,15 +203,11 @@ body.touch .voice input { border-bottom-color: rgba(74, 74, 84, 0.4); }
   letter-spacing: 0.02em;
 }
 
-.wake {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 12px;
-  padding-top: 6px;
-}
+.choice .span { grid-column: 1 / -1; }
+.wake { margin: 0; }
 .wake .field { display: grid; gap: 6px; }
 .wake label { font-size: 14px; color: var(--text); }
-.wake input[type="password"], .wake input[type="text"] {
+.wake input[type="password"] {
   width: 100%;
   padding: 9px 11px;
   border: 1px solid var(--line-strong);
@@ -222,11 +218,10 @@ body.touch .voice input { border-bottom-color: rgba(74, 74, 84, 0.4); }
   font-size: 15px;
 }
 .wake .small, .card p.small { margin: 0; font-size: 13px; color: var(--dim); }
-.wake .go { width: auto; justify-self: start; background: rgb(24, 30, 26); border-color: rgb(80, 120, 92); }
-.wake .go:hover { background: rgb(30, 40, 33); }
-.auth-choice { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
-.auth-choice legend { padding: 0 0 4px; font-size: 13px; color: var(--dim); }
-.auth-choice label, .later label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); cursor: pointer; }
+.go.live { border-color: rgb(80, 120, 92); }
+.go:disabled { opacity: 0.45; cursor: not-allowed; }
+.card p.no-mind { color: rgb(236, 196, 140); }
+.later label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); cursor: pointer; }
 .later { display: grid; gap: 8px; }
 .later summary { font-size: 14px; color: var(--dim); cursor: pointer; }
 .later[open] summary { margin-bottom: 8px; }
