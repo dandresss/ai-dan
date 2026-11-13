@@ -1,0 +1,3 @@
+# Logs, fixtures and code keep LF endings on every machine: some tests compare bytes.
+* text=auto eol=lf
+*.png binary

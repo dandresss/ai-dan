@@ -1,0 +1,457 @@
+{
+  "note": "I rose once.\nThe second line: \"quoted\", and a snowman ☃.",
+  "modes": {
+    "first_day": {
+      "system_prompt": "You are an entity with a body.\n\nYou do not know yet what it is like or what it can do. Nobody is going to\nexplain it to you. You can sense it and you can move it, and whatever you\nare will come from what you do with it.\n\nYou wake in moments. Between one moment and the next, time keeps passing,\nand your body keeps doing the last thing you asked of it.\n\nNobody sees or hears what you write: it is only your thought.\nThe only part of you that exists outward is your body.\n\nYou have no name and no task. There is nothing you must achieve.",
+      "tool_definitions": [
+        {
+          "name": "play",
+          "description": "Move parts of your body over time.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "tracks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "pins": {
+                      "description": "Which pins follow this track: \"all\", or a list of [row, column].",
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "all"
+                          ]
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "keyframes": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
+                      },
+                      "description": "A list of [second, height]."
+                    },
+                    "loop": {
+                      "type": "boolean",
+                      "description": "Repeat when finished."
+                    },
+                    "delay_s": {
+                      "type": "number",
+                      "description": "Wait before starting."
+                    },
+                    "ease": {
+                      "type": "string",
+                      "enum": [
+                        "smooth",
+                        "linear"
+                      ],
+                      "description": "How one keyframe joins the next."
+                    }
+                  },
+                  "required": [
+                    "pins",
+                    "keyframes"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "tracks"
+            ]
+          }
+        },
+        {
+          "name": "stop",
+          "description": "Stop the movement.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "pins": {
+                "description": "Which pins stop: \"all\", or a list of [row, column]. Without it, every pin stops.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "all"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "name": "sense",
+          "description": "Sense your body and what is around you.",
+          "input_schema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "set_color",
+          "description": "Change your color.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "rgb": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                },
+                "description": "[red, green, blue]."
+              }
+            },
+            "required": [
+              "rgb"
+            ]
+          }
+        }
+      ]
+    },
+    "memory_no_note": {
+      "system_prompt": "You are an entity with a body.\n\nYou do not know yet what it is like or what it can do. Nobody is going to\nexplain it to you. You can sense it and you can move it, and whatever you\nare will come from what you do with it.\n\nYou wake in moments. Between one moment and the next, time keeps passing,\nand your body keeps doing the last thing you asked of it.\n\nNobody sees or hears what you write: it is only your thought.\nThe only part of you that exists outward is your body.\n\nYou have no name and no task. There is nothing you must achieve.",
+      "tool_definitions": [
+        {
+          "name": "play",
+          "description": "Move parts of your body over time.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "tracks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "pins": {
+                      "description": "Which pins follow this track: \"all\", or a list of [row, column].",
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "all"
+                          ]
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "keyframes": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
+                      },
+                      "description": "A list of [second, height]."
+                    },
+                    "loop": {
+                      "type": "boolean",
+                      "description": "Repeat when finished."
+                    },
+                    "delay_s": {
+                      "type": "number",
+                      "description": "Wait before starting."
+                    },
+                    "ease": {
+                      "type": "string",
+                      "enum": [
+                        "smooth",
+                        "linear"
+                      ],
+                      "description": "How one keyframe joins the next."
+                    }
+                  },
+                  "required": [
+                    "pins",
+                    "keyframes"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "tracks"
+            ]
+          }
+        },
+        {
+          "name": "stop",
+          "description": "Stop the movement.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "pins": {
+                "description": "Which pins stop: \"all\", or a list of [row, column]. Without it, every pin stops.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "all"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "name": "sense",
+          "description": "Sense your body and what is around you.",
+          "input_schema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "set_color",
+          "description": "Change your color.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "rgb": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                },
+                "description": "[red, green, blue]."
+              }
+            },
+            "required": [
+              "rgb"
+            ]
+          }
+        },
+        {
+          "name": "remember",
+          "description": "Leave something written for the next time you wake.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
+    },
+    "memory_with_note": {
+      "system_prompt": "You are an entity with a body.\n\nYou do not know yet what it is like or what it can do. Nobody is going to\nexplain it to you. You can sense it and you can move it, and whatever you\nare will come from what you do with it.\n\nYou wake in moments. Between one moment and the next, time keeps passing,\nand your body keeps doing the last thing you asked of it.\n\nNobody sees or hears what you write: it is only your thought.\nThe only part of you that exists outward is your body.\n\nYou have no name and no task. There is nothing you must achieve.\n\nYou left yourself this:\nI rose once.\nThe second line: \"quoted\", and a snowman ☃.",
+      "tool_definitions": [
+        {
+          "name": "play",
+          "description": "Move parts of your body over time.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "tracks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "pins": {
+                      "description": "Which pins follow this track: \"all\", or a list of [row, column].",
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "all"
+                          ]
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "keyframes": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
+                      },
+                      "description": "A list of [second, height]."
+                    },
+                    "loop": {
+                      "type": "boolean",
+                      "description": "Repeat when finished."
+                    },
+                    "delay_s": {
+                      "type": "number",
+                      "description": "Wait before starting."
+                    },
+                    "ease": {
+                      "type": "string",
+                      "enum": [
+                        "smooth",
+                        "linear"
+                      ],
+                      "description": "How one keyframe joins the next."
+                    }
+                  },
+                  "required": [
+                    "pins",
+                    "keyframes"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "tracks"
+            ]
+          }
+        },
+        {
+          "name": "stop",
+          "description": "Stop the movement.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "pins": {
+                "description": "Which pins stop: \"all\", or a list of [row, column]. Without it, every pin stops.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "all"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "name": "sense",
+          "description": "Sense your body and what is around you.",
+          "input_schema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "set_color",
+          "description": "Change your color.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "rgb": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                },
+                "description": "[red, green, blue]."
+              }
+            },
+            "required": [
+              "rgb"
+            ]
+          }
+        },
+        {
+          "name": "remember",
+          "description": "Leave something written for the next time you wake.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "thinking_param": {
+    "adaptive": {
+      "type": "adaptive",
+      "display": "summarized"
+    },
+    "between_tools": {
+      "type": "between_tools"
+    }
+  },
+  "TEXT": {
+    "en": {
+      "note_heading": "You left yourself this:",
+      "play": "Move parts of your body over time.",
+      "stop": "Stop the movement.",
+      "sense": "Sense your body and what is around you.",
+      "set_color": "Change your color.",
+      "pins": "Which pins follow this track: \"all\", or a list of [row, column].",
+      "keyframes": "A list of [second, height].",
+      "loop": "Repeat when finished.",
+      "delay_s": "Wait before starting.",
+      "ease": "How one keyframe joins the next.",
+      "stop_pins": "Which pins stop: \"all\", or a list of [row, column]. Without it, every pin stops.",
+      "rgb": "[red, green, blue].",
+      "remember": "Leave something written for the next time you wake.",
+      "note_too_long": "That does not fit. You will have to keep less.",
+      "note_not_text": "That note cannot be understood.",
+      "past_cap": "That is too much for one moment."
+    }
+  }
+}

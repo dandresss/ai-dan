@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>A body to wake up in</title>
+<meta name="description" content="A simulated body of 64 pins, and a Claude mind that wakes inside it without being told what it is. The virtual lab, in a web page.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#030305">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="lab/app.js"></script>
+<link rel="modulepreload" href="lab/render.js">
+<link rel="modulepreload" href="lab/render-base.js">
+<link rel="modulepreload" href="lab/render-chrome.js">
+<link rel="modulepreload" href="lab/render-panel.js">
+<link rel="modulepreload" href="lab/ui-session.js">
+<link rel="modulepreload" href="lab/ui-loop.js">
+<link rel="modulepreload" href="lab/ui-start.js">
+</head>
+<body>
+<canvas id="room" role="img" aria-label="The room: a body of 64 pins"></canvas>
+
+<form id="voice" class="voice empty" hidden autocomplete="off">
+  <input id="voice-input" type="text" maxlength="200" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" spellcheck="false" aria-label="Say something to it">
+  <small id="voice-hint" hidden>Enter to say it</small>
+</form>
+
+<nav id="controls" class="controls" hidden aria-label="Session">
+  <button type="button" data-act="pause" aria-pressed="false">Pause</button>
+  <button type="button" data-act="speed">Speed 1×</button>
+  <button type="button" data-act="again" hidden>Watch again</button>
+  <button type="button" data-act="panel" aria-pressed="false" aria-keyshortcuts="Tab">Observer</button>
+  <button type="button" data-act="help" aria-pressed="false" aria-keyshortcuts="F1">Help</button>
+  <button type="button" data-act="clean" aria-keyshortcuts="F2">Hide text</button>
+  <button type="button" data-act="fullscreen" aria-pressed="false">Fullscreen</button>
+  <button type="button" data-act="download">Download log</button>
+  <button type="button" data-act="end">End session</button>
+  <button type="button" data-act="back">Back to start</button>
+</nav>
+<button type="button" id="show-text" class="show-text" hidden aria-keyshortcuts="F2">Show text</button>
+
+<main id="start" class="start">
+  <div class="card">
+    <h1>A body to wake up in</h1>
+    <p class="lead">An AI wakes up inside a surface of 64 pins. Nobody has told it what it is.</p>
+    <p>This is the virtual lab: a simulated body, you as the person in the room, and a Claude model as the mind. It can move its pins, change its colour and sense what is around it, and nothing else.</p>
+
+    <section class="choice first">
+      <button type="button" id="watch" class="go primary">Watch the first waking</button>
+      <p>34 seconds of the first live session: a real mind, with a scripted visitor. <b>Observer</b> shows what it thought.</p>
+    </section>
+
+    <section class="choice">
+      <button type="button" id="wake-open" class="go" aria-expanded="false" aria-controls="wake-form">Wake a mind</button>
+      <p>A live session. You are the person in the room: move, touch a pin, type to speak.</p>
+      <form id="wake-form" class="wake" hidden>
+        <fieldset id="auth-choice" class="auth-choice" hidden>
+          <legend>How it reaches the model</legend>
+          <label><input type="radio" name="auth" value="key" checked> My Anthropic API key</label>
+          <label><input type="radio" name="auth" value="code"> An access code from the host</label>
+        </fieldset>
+        <div id="key-row" class="field">
+          <label for="api-key">Your Anthropic API key</label>
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+          <p class="small">The key is sent only to api.anthropic.com, straight from this browser. It is not stored anywhere, and closing the tab forgets it. You pay for the tokens the mind uses.</p>
+        </div>
+        <div id="code-row" class="field" hidden>
+          <label for="access-code">Access code</label>
+          <input id="access-code" type="password" autocomplete="off" spellcheck="false">
+          <p class="small">The mind's requests go through this site, which sends them on with the host's key.</p>
+        </div>
+        <p class="small">Model <code id="model-name">claude-sonnet-5-5</code>. The status line counts the tokens as they are used; the 34-second first waking used 21,637 in and 896 out. A session ends by itself after <span id="limits">40 turns or 15 minutes</span>, or when you end it.</p>
+        <details id="later-days" class="later">
+          <summary>Later-days mode</summary>
+          <label><input type="checkbox" id="memory"> Memory across sessions</label>
+          <p class="small">The mind gets a <code>remember</code> tool and reads the note it left last time. The note is kept in this browser's local storage and nowhere else.</p>
+          <p class="small" id="note-state"></p>
+          <button type="button" id="forget-note" class="small-button" hidden>Forget the note</button>
+        </details>
+        <button type="submit" id="wake-go" class="go">Wake it</button>
+      </form>
+    </section>
+
+    <section class="choice">
+      <button type="button" id="dryrun" class="go warn">Wiring test <span class="pill">not an AI</span></button>
+      <p>The whole loop with a scripted stand-in, to see the room work. No key, and no AI.</p>
+    </section>
+
+    <section class="choice" id="drop">
+      <label id="log-file-label" class="go" for="log-file" tabindex="0" role="button">Open a session log</label>
+      <input type="file" id="log-file" accept=".jsonl,.json,.txt,application/x-ndjson" hidden>
+      <p>A <code>.jsonl</code> from the desktop lab or from this page; you can also drop one here. It replays without the API, and says if the body did not reach the states in the log.</p>
+    </section>
+
+    <p id="start-error" class="start-error" role="alert" hidden></p>
+    <p id="behind" class="behind" hidden>The body on this page is the first waking, replayed.</p>
+  </div>
+</main>
+
+<div id="errors" class="errors" aria-live="assertive"></div>
+<p id="boot-note" class="boot-note">If this line stays, the page's script did not start. The browser's console says why.</p>
+<noscript><p class="boot-note now">The lab runs in JavaScript, which is off in this browser.</p></noscript>
+</body>
+</html>
