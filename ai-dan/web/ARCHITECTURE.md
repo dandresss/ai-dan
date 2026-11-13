@@ -42,10 +42,17 @@ web/                         Vercel project root ("Root Directory" = ai-dan/web)
     mind.js         mind     port of lab/mind.py (prompt, texts, tools, the note)
     model.js        mind     AnthropicModel (direct or through api/mind.js), ScriptedModel
     harness.js      mind     port of lab/harness.py, async
-    render.js       ui       port of lab/render.py to a 2D canvas
-    app.js          ui       the page: start screen, input, the fixed-step loop
+    render.js       ui       port of lab/render.py to a 2D canvas: layout, room, pins, person
+    render-base.js  ui       palette, fonts, wrapping, Python number formats
+    render-chrome.js ui      intro, status line, banners, help
+    render-panel.js ui       the observer: reading the feed, call summaries, the panel
+    app.js          ui       the page
+    ui-start.js     ui       the start screen
+    ui-session.js   ui       a session's lifecycle: start, end, download
+    ui-loop.js      ui       the fixed-step loop and the pointer
   tests/            each owner: `<module>.test.js`, run with `node --test`
     fixtures/       generated from the Python lab by scripts kept next to them
+../tests/test_web_interop.py   the Python lab verifies a log written by the web lab
 ```
 
 Rules for the team:
@@ -107,6 +114,22 @@ Python byte for byte for every log line, every wake message (`{"t": 12.0}`)
 and every tool result (`{"ok": true, "t": 0.02}`, `sense` with
 `"actual": [[0.0, ...` and `"color": [255, 255, 255]`). String escaping is
 what `JSON.stringify` does for a string, which matches `ensure_ascii=False`.
+
+What JavaScript cannot keep, and why it does not matter:
+
+- **The model's own spelling of numbers in tool input.** `JSON.parse` turns
+  `1.0` into `1`, so `args` in `call` lines, and the `tool_use.input` echoed
+  back to the model within a turn, can read `1` where Python writes `1.0`.
+  Integer-like keys come first, and integers past 2^53 lose digits. The body
+  converts every number to a float before using it, so behaviour, hashes,
+  `--verify` and `lab.analyze` are unaffected. The wiring test's `delay_s:
+  r * 0.25` is logged as `0`, `1`, ... for the same reason.
+- `-0` outside float keys is written `-0.0` (a Python int cannot be -0).
+- `Infinity` can appear in a log (a model writing `1e400`); `pyLoads` reads
+  it as Python's `json.loads` does, where `JSON.parse` would throw.
+- `Math.cos` and the C library's `cos` differ in the last bit on about 2% of
+  inputs. Hashes round to 9 decimals and heights are quantised, so no log
+  has been affected; the tests measure the bound.
 
 `SimBody.stateHash()` does not use `pyDumps`: it knows the type of every field
 of the state (see `lab/simbody.py`: `tick`, colours and the pushed pin are
@@ -199,12 +222,23 @@ error text, never the key.
 
 `harness.js`: `new Harness(world, model, config, { noteStore = null,
 retryWaits = [2, 4, 8], sleep })`, `start({ runLoop = true })`,
-`async step()` (true if a turn ran), `stop(reason = "window_closed")`. The
-mind loop is `while (!ended && !stopped) { if (!(await step())) await
-sleep(20 ms) }`. Every decision is made from `world.t` and `world.events`,
-exactly as in `harness.py`; the log lines it writes are the same, field for
-field. `stop()` aborts a request in flight; anything that arrives after the
-close is discarded, as in Python.
+`async step()` (true if a turn ran), `async stop(reason = "window_closed")`.
+`sleep(seconds)` takes seconds, like Python's waits. The mind loop is
+`while (!ended && !stopped) { if (!(await step())) await sleep(0.02) }`.
+Every decision is made from `world.t` and `world.events`, exactly as in
+`harness.py`; the log lines it writes are the same, field for field
+(`tests/fixtures/harness.json` is Python's output for the same scenarios).
+
+`stop()` aborts a request in flight, waits up to 1 s for the turn to log its
+end (Python's `join(timeout=1)`), then writes `close`; the page awaits it.
+Python cannot cancel a request, so there the turn may log an `api_error` or
+one more retry; here the turn ends with `skipped: false` and nothing more is
+sent. In later-days mode without a `noteStore` the note lives in memory for
+the session. The note's line endings are normalised on reading (`\r\n` and
+`\r` become `\n`), as Python's text files do. `NOTE_KEY` is `"ai-dan.note"`.
+
+`SessionLog` takes `{ feed, now }`; `now` is the clock for `started_at` and
+the file name, so tests can fix it.
 
 ## The page (`index.html`, `lab/render.js`, `lab/app.js`)
 
@@ -222,7 +256,10 @@ downloaded as its JSONL log at any time and when it ends.
 The loop is the desktop's: fixed 20 ms simulation steps kept in line with
 the wall clock by `requestAnimationFrame`, at most 10 steps per frame, a
 longer stall dropped rather than replayed (`app.py`). When the tab is hidden
-the person has left the room.
+the person has left the room. A live session keeps running on a timer
+instead, which browsers wake as seldom as once a minute, so each wake
+catches simulation time up with the wall clock, up to 60 s at a time. A
+replay pauses.
 
 `GET /api/mind` answers `{"available": true|false}`: whether the host has
 turned on the access-code mode. When it is off, or the request fails, the
@@ -236,5 +273,21 @@ Every push to `main` deploys to production; other branches get previews.
 
 The access-code mode is off unless the owner sets both `ANTHROPIC_API_KEY`
 and `LAB_ACCESS_CODE` in the Vercel project. The function only forwards
-requests that are this lab's: the system prompt, tools, model and settings
-must be exactly what `lab/mind.js` and `lab/config.js` produce.
+requests that are this lab's:
+
+- The system prompt must be the lab's, optionally followed by a note of up
+  to `NOTE_MAX_CHARS` in later-days mode.
+- The model, `max_tokens`, thinking, effort and tools always come from
+  `lab/config.js` and `lab/mind.js` on the server, whatever the browser sends.
+- Every message block is rebuilt from the fields the harness writes. User
+  text must be a wake (`{"t": ...}` with at most 20 heard lines of 200
+  characters), and a tool result must be a body answer (a JSON object with
+  `t`). Images, documents and cache settings never get through.
+- Wrong codes are counted per caller and slowed after 10 in 10 minutes, per
+  function instance.
+- When the browser gives up, the request to the API is cancelled.
+
+Anyone who holds the code can still spend the key, one lab-shaped request at
+a time: share it only with people you trust, and give the key a spend limit
+in the Anthropic Console. `tests/api_session.test.js` runs whole sessions
+through the function to show the harness's own requests always pass.

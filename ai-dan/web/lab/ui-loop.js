@@ -1,9 +1,14 @@
-// The page's clock and the person's pointer, as plain logic (no DOM), so
-// tests can drive them.
+// The page's clock, the person's pointer and what a key does in the room,
+// as plain logic (no DOM), so tests can drive them.
 
 export const STEP_S = 0.02;          // one simulation tick
 export const MAX_CATCH_UP = 10;      // ticks per frame at most; a longer stall is dropped, not replayed
-export const HIDDEN_CATCH_UP = 50;   // a hidden tab is woken about once a second: keep up with that
+// A hidden tab gets no animation frames, and its timers are woken rarely:
+// about once a second, and in Chrome about once a minute after five minutes
+// hidden. Each wake catches simulation time up with the wall clock, up to a
+// minute (3000 steps of 64 pins are cheap), so the mind's absence and its
+// limits are counted in real seconds; a longer gap is dropped like any stall.
+export const HIDDEN_CATCH_UP = 3000;
 
 /**
  * The fixed-step loop of app.py: simulation time runs in 20 ms steps kept in
@@ -103,4 +108,25 @@ export class Pointer {
   pressed(lay, rows = 8, cols = 8) {
     return this.pos && this.button ? lay.pinAt(this.pos, rows, cols) : null;
   }
+}
+
+/**
+ * What a key does in the room: "panel", "help", "clean", "close-help",
+ * "pause", "type" (move to the typing line), or null (the browser's own).
+ * Letters are never shortcuts: typing is the person's voice. Tab opens the
+ * observer, as on the desktop, unless a button has focus: then Tab and
+ * Shift+Tab move between the buttons, and Shift+Tab is how the keyboard
+ * reaches them.
+ */
+export function keyAction({ key, shift = false, ctrl = false, alt = false, meta = false,
+  onControl = false, replay = false, typing = false, helpOpen = false }) {
+  const plain = !ctrl && !alt && !meta;
+  if (key === "F1") return "help";
+  if (key === "F2") return "clean";
+  if (key === "Escape") return helpOpen ? "close-help" : null;
+  if (key === "Tab") return plain && !shift && !onControl ? "panel" : null;
+  if (onControl && (key === " " || key === "Enter")) return null;   // the button's own
+  if (replay) return key === " " && plain ? "pause" : null;
+  if (plain && !typing && (key.length === 1 || key === "Process")) return "type";
+  return null;
 }

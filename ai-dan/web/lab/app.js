@@ -9,7 +9,8 @@
 
 import { font } from "./render-base.js";
 import { draw, makeView, restingSnapshot, statusY, typingY } from "./render.js";
-import { Session } from "./ui-session.js";
+import { keyAction } from "./ui-loop.js";
+import { Session, notALog } from "./ui-session.js";
 import { StartScreen, safeStorage } from "./ui-start.js";
 
 const TITLE = "A body to wake up in";
@@ -100,6 +101,7 @@ const touchNow = () => lastTouch;
 
 function enter(s) {
   session = s;
+  if (start.el.contains(document.activeElement)) document.activeElement.blur();   // the card's buttons are gone
   start.hide();
   document.title = s.replay ? `${TITLE}  (replay: ${s.name})`
     : s.kind === "dryrun" ? `${TITLE}  (wiring test, not an AI)` : TITLE;
@@ -110,7 +112,12 @@ function enter(s) {
 
 async function openReplay(events, name, { speed = 1, panel = null } = {}) {
   const { ReplayWorld } = await load("world");
-  const world = new ReplayWorld(events);
+  let world;
+  try {
+    world = new ReplayWorld(events);
+  } catch (err) {
+    throw notALog(err);
+  }
   const view = makeView({ mode: "replay", intro: 0, replayName: name, speed, touch: touchNow(),
     panel: panel ?? window.innerWidth >= PANEL_OPEN_WIDTH });
   enter(new Session({ kind: "replay", world, view, events, name }));
@@ -120,9 +127,9 @@ async function openFile(file) {
   const [text, { parseLog }] = await Promise.all([file.text(), load("log")]);
   let events;
   try {
-    events = parseLog(text);
+    events = parseLog(text);   // strict, like Python's read_log: one bad line and it is not a log
   } catch (err) {
-    throw new Error(`not a session log (${err.message})`);
+    throw notALog(err);
   }
   await openReplay(events, file.name);
 }
@@ -185,7 +192,7 @@ function showStart() {
 async function endSession() {
   const s = session;
   if (!s || s.replay || s.halted) return;
-  if (s.kind === "live" && !window.confirm("End this session? The mind stops. Its log stays here to download.")) return;
+  if (s.running && s.harness && !window.confirm("End this session? The mind stops. Its log stays here to download.")) return;
   try {
     await s.shutdown();
   } catch (err) {
@@ -195,8 +202,9 @@ async function endSession() {
 
 async function backToStart() {
   const s = session;
-  if (s?.kind === "live" && !s.downloaded
-    && !window.confirm("Go back to the start? This session's log has not been downloaded and will be lost.")) return;
+  if (s?.kind === "live" && s.unsaved && !window.confirm(s.savedLength
+    ? "Go back to the start? This session's log has grown since you downloaded it, and the rest will be lost."
+    : "Go back to the start? This session's log has not been downloaded and will be lost.")) return;
   if (s && !s.halted) {
     try {
       await s.shutdown();
@@ -207,16 +215,25 @@ async function backToStart() {
   showStart();
 }
 
-function download(s) {
+async function download(s) {
   if (!s?.log) return;
-  const blob = new Blob([s.log.text()], { type: "application/x-ndjson" });
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement("a"), { href: url, download: s.log.fileName() });
+  // Once the mind has ended, the file is made whole first: the room stops,
+  // the world writes its last state and the log closes, as when the desktop
+  // window closes. Before that, the download is the log so far.
+  if (s.mindEnded && !s.halted) {
+    try {
+      await s.shutdown();
+    } catch (err) {
+      report(err, "The session did not close cleanly");
+    }
+  }
+  const { text, name } = s.logFile();
+  const url = URL.createObjectURL(new Blob([text], { type: "application/x-ndjson" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  s.downloaded = true;
 }
 
 function toggleFullscreen() {
@@ -236,7 +253,7 @@ function act(name) {
     case "pause": v.paused = !v.paused; break;
     case "speed": v.speed = SPEEDS[(SPEEDS.indexOf(v.speed) + 1) % SPEEDS.length]; break;
     case "again": openReplay(s.events, s.name, { speed: v.speed, panel: v.panel }).catch((err) => report(err, "Replay")); break;
-    case "download": download(s); break;
+    case "download": download(s).catch((err) => report(err, "Download")); break;
     case "end": endSession(); break;
     case "back": backToStart(); break;
     default: break;
@@ -311,33 +328,25 @@ function scrollPanel(dy) {
   v.panelScroll = Math.max(0, Math.min(max, v.panelScroll + dy));
 }
 
+// The session's own buttons, and the notes' close buttons: keys that move or
+// press them are theirs.
+const isControl = (el) => el instanceof HTMLButtonElement
+  && (controls.contains(el) || el === showText || errorsBox.contains(el));
+
 window.addEventListener("keydown", (e) => {
   if (!inRoom()) return;
-  const v = session.view;
-  const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
-  if (e.key === "Tab" && plain) {
-    e.preventDefault();
-    act("panel");
-  } else if (e.key === "F1") {
-    e.preventDefault();
-    act("help");
-  } else if (e.key === "F2") {
-    e.preventDefault();
-    act("clean");
-  } else if (e.key === "Escape") {
-    if (v.help) {
-      e.preventDefault();
-      v.help = false;
-    }
-  } else if (session.replay) {
-    if (e.key === " " && plain) {
-      e.preventDefault();
-      act("pause");
-    }
-  } else if (plain && document.activeElement !== voiceInput && (e.key.length === 1 || e.key === "Process")) {
-    // Letters are never shortcuts: typing is the person's voice.
-    if (!voice.hidden) voiceInput.focus({ preventScroll: true });
+  const focus = document.activeElement;
+  const action = keyAction({ key: e.key, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey,
+    onControl: isControl(focus), replay: session.replay, typing: focus === voiceInput,
+    helpOpen: session.view.help });
+  if (action === null) return;
+  if (action === "type") {
+    if (!voice.hidden) voiceInput.focus({ preventScroll: true });   // the key itself lands in the line
+    return;
   }
+  e.preventDefault();
+  if (action === "close-help") session.view.help = false;
+  else act(action);
 }, true);
 
 voice.addEventListener("submit", (e) => {
@@ -359,8 +368,10 @@ controls.addEventListener("click", (e) => {
   const button = e.target.closest("button");
   if (!button) return;
   act(button.dataset.act);
-  button.blur();
-  refocus();
+  if (e.detail > 0) {        // a pointer click: the keys go back to the room; a key press keeps its place
+    button.blur();
+    refocus();
+  }
 });
 showText.addEventListener("click", () => {
   act("clean");
@@ -390,7 +401,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 window.addEventListener("beforeunload", (e) => {
-  if (session?.kind === "live" && (session.running || !session.downloaded)) {
+  if (session?.kind === "live" && (session.running || session.unsaved)) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -514,8 +525,9 @@ function syncPage(lay) {
   setHidden(buttons.speed, !s.replay);
   setHidden(buttons.again, !(s.replay && s.world.done));
   setHidden(buttons.download, s.replay);
-  setHidden(buttons.end, s.replay || s.halted);
-  setHidden(buttons.back, !(s.replay || s.halted));
+  const over = s.halted || s.mindEnded;     // a mind that ended by itself needs no "End session"
+  setHidden(buttons.end, s.replay || over);
+  setHidden(buttons.back, !(s.replay || over));
   setHidden(buttons.fullscreen, !document.fullscreenEnabled);
   setHidden(buttons.clean, lay.compact);
   setPressed(buttons.panel, v.panel);
@@ -555,8 +567,14 @@ function syncPage(lay) {
 // --- boot ------------------------------------------------------------------------
 $("boot-note").remove();
 showStart();
-start.follow(window.location.hash);
-window.addEventListener("hashchange", () => {
-  if (start.visible) start.follow(window.location.hash);
-});
+// A link into the room (#watch, #wiring-test) is followed from the start
+// screen, then cleared, so the same link works again after Back to start.
+function followHash() {
+  const hash = window.location.hash;
+  if (!hash) return;
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+  if (start.visible) start.follow(hash);
+}
+followHash();
+window.addEventListener("hashchange", followHash);
 requestAnimationFrame(frame);

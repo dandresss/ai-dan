@@ -28,6 +28,18 @@ Without a key the room still opens, and says plainly that no mind is connected. 
 - `uv run python main.py --replay docs/first-wake.jsonl` plays back the first live session, 34 seconds long: a real mind, with a scripted visitor standing in for the person. Press Tab to read what it thought.
 - `uv run python main.py --dry-run` runs the whole loop with a scripted stand-in. It is a wiring test, labelled on screen as not an AI, and the analysis never counts it.
 
+## In a web page
+
+The same lab runs in a browser, from `web/`: **[ai-dan-web.vercel.app](https://ai-dan-web.vercel.app)**. It is a port to plain JavaScript, not a lookalike. Every desktop session log replays there to the same body states, and a log downloaded from the page passes `--verify` and `lab.analyze` here. `web/ARCHITECTURE.md` explains how.
+
+- **Watch the first waking** replays `docs/first-wake.jsonl`. No key needed.
+- **Wake a mind** needs the visitor's own Anthropic API key. The key goes from their browser straight to api.anthropic.com and is not stored. If the host turns on the access-code mode, a visitor with the code can use the host's key instead.
+- **Wiring test** is the scripted stand-in. **Open a session log** replays any `.jsonl`.
+
+It is hosted on Vercel's free tier. The project's Root Directory is `ai-dan/web`, there is no build step, and every push to `main` deploys. To run it locally, serve the folder: `cd web` then `python -m http.server`. Its tests need Node: `cd web` then `npm test`.
+
+The access-code mode is off by default. To turn it on, set both `ANTHROPIC_API_KEY` and `LAB_ACCESS_CODE` in the Vercel project's environment variables, then redeploy. Every session then runs on that key. `api/mind.js` forwards only this lab's prompt, tools, settings and conversation shape, but anyone with the code can still spend the key. Share the code only with people you trust, and set a spend limit on the key in the Anthropic Console.
+
 ## In the room
 
 | You | How |

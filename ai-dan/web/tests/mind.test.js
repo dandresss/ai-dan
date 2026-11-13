@@ -173,3 +173,10 @@ test("no note means no note", () => {
   assert.equal(systemPrompt(config, null), PROMPTS["mind-v0"].en);
   assert.equal(systemPrompt(config, ""), PROMPTS["mind-v0"].en);
 });
+
+test("a note is read back with universal newlines, as Python reads a text file", () => {
+  const store = memoryStore("one\r\ntwo\rthree\nfour");
+  assert.equal(loadNote(store), "one\ntwo\nthree\nfour");
+  assert.equal(systemPrompt(new Config({ MEMORY_ENABLED: true }), loadNote(store)),
+               PROMPTS["mind-v0"].en + "\n\nYou left yourself this:\none\ntwo\nthree\nfour");
+});

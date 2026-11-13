@@ -1,12 +1,16 @@
 {"type": "header", "version": 1, "started_at": "2026-11-12T12:00:00", "config": {"GRID_ROWS": 8, "GRID_COLS": 8, "LEVELS": 64, "FULL_TRAVEL_S": 0.5, "TICK_HZ": 50, "RESPONSE_MS": 80, "DEFAULT_COLOR": [255, 255, 255], "MAX_TRACKS": 16, "MAX_KEYFRAMES": 16, "MAX_TRACK_S": 600.0, "PULSE_S": 12.0, "ABSENCE_GRACE_S": 2.0, "MAX_TOOL_CALLS": 8, "MAX_TURNS": 40, "MAX_SESSION_MIN": 15.0, "MEMORY_FULL_TURNS": 6, "MAX_TOKENS": 4096, "MODEL": "claude-sonnet-5-5", "EFFORT": "low", "THINKING": "adaptive", "PROMPT_VERSION": "mind-v0", "LANGUAGE": "en", "MEMORY_ENABLED": false, "NOTE_MAX_CHARS": 1500, "STATE_EVERY_TICKS": 250}, "t": 0.0, "prompt_version": "mind-v0", "prompt": "You are an entity with a body.\n\nYou do not know yet what it is like or what it can do. Nobody is going to\nexplain it to you. You can sense it and you can move it, and whatever you\nare will come from what you do with it.\n\nYou wake in moments. Between one moment and the next, time keeps passing,\nand your body keeps doing the last thing you asked of it.\n\nNobody sees or hears what you write: it is only your thought.\nThe only part of you that exists outward is your body.\n\nYou have no name and no task. There is nothing you must achieve.", "model": "scripted", "tools": ["play", "stop", "sense", "set_color"], "memory_enabled": false, "mind": "scripted"}
 {"type": "person", "tick": 0, "t": 0.0, "pos": [9.5, 4.0]}
 {"type": "wake", "t": 0.02, "turn": 1, "reasons": ["arrival"], "message": "{\"t\": 0.02}"}
+{"type": "usage", "t": 0.02, "turn": 1, "model": "scripted", "stop_reason": "tool_use", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 0.02, "turn": 1, "kind": "text", "text": "scripted turn 1, step 1"}
 {"type": "person", "tick": 1, "t": 0.02, "pos": [9.45, 4.01]}
 {"type": "call", "turn": 1, "tick": 1, "t": 0.02, "name": "sense", "args": {}, "result": {"t": 0.02, "actual": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], "gap": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], "person": [9.4, 4.0], "color": [255, 255, 255]}}
 {"type": "person", "tick": 2, "t": 0.04, "pos": [9.39, 4.03]}
 {"type": "call", "turn": 1, "tick": 2, "t": 0.04, "name": "play", "args": {"tracks": [{"pins": "all", "keyframes": [[0, 0.2], [2, 0.8], [4, 0.2]], "loop": true}]}, "result": {"ok": true, "t": 0.04}}
 {"type": "person", "tick": 3, "t": 0.06, "pos": [9.34, 4.04]}
 {"type": "call", "turn": 1, "tick": 3, "t": 0.06, "name": "set_color", "args": {"rgb": [80, 160, 255]}, "result": {"ok": true, "t": 0.06}}
+{"type": "usage", "t": 0.08, "turn": 1, "model": "scripted", "stop_reason": "end_turn", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 0.08, "turn": 1, "kind": "text", "text": "scripted turn 1, step 2"}
 {"type": "turn_end", "t": 0.08, "turn": 1, "tool_calls": 3, "capped": false, "skipped": false}
 {"type": "person", "tick": 4, "t": 0.08, "pos": [9.28, 4.05]}
 {"type": "person", "tick": 5, "t": 0.1, "pos": [9.22, 4.06]}
@@ -189,7 +193,9 @@
 {"type": "voice", "tick": 180, "t": 3.6, "text": "hello there"}
 {"type": "person", "tick": 180, "t": 3.6, "pos": [3.99, 4.7]}
 {"type": "press", "tick": 180, "t": 3.6, "pin": null}
-{"type": "wake", "t": 3.62, "turn": 2, "reasons": ["voice"], "message": "{\"t\": 3.62}"}
+{"type": "wake", "t": 3.62, "turn": 2, "reasons": ["voice"], "message": "{\"t\": 3.62, \"heard\": [\"hello there\"]}"}
+{"type": "usage", "t": 3.62, "turn": 2, "model": "scripted", "stop_reason": "tool_use", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 3.62, "turn": 2, "kind": "text", "text": "scripted turn 2, step 3"}
 {"type": "person", "tick": 181, "t": 3.62, "pos": [3.96, 4.69]}
 {"type": "call", "turn": 2, "tick": 181, "t": 3.62, "name": "sense", "args": {}, "result": {"t": 3.62, "actual": [[0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3], [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3], [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3], [0.3, 0.3, 0.3, 0.3, 0.05, 0.3, 0.3, 0.3], [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3], [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3], [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3], [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]], "gap": [[0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.54, 0.33, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21]], "person": [4.0, 4.7], "color": [80, 160, 255]}}
 {"type": "person", "tick": 182, "t": 3.64, "pos": [3.94, 4.68]}
@@ -198,6 +204,8 @@
 {"type": "call", "turn": 2, "tick": 183, "t": 3.66, "name": "stop", "args": {"pins": [[4, 4], [4, 5]]}, "result": {"ok": true, "t": 3.66}}
 {"type": "person", "tick": 184, "t": 3.68, "pos": [3.88, 4.66]}
 {"type": "call", "turn": 2, "tick": 184, "t": 3.68, "name": "fly", "args": {"to": "the moon"}, "result": {"ok": false, "t": 3.68, "error": "That cannot be understood."}}
+{"type": "usage", "t": 3.7, "turn": 2, "model": "scripted", "stop_reason": "end_turn", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 3.7, "turn": 2, "kind": "text", "text": "scripted turn 2, step 4"}
 {"type": "turn_end", "t": 3.7, "turn": 2, "tool_calls": 4, "capped": false, "skipped": false}
 {"type": "person", "tick": 185, "t": 3.7, "pos": [3.86, 4.65]}
 {"type": "person", "tick": 186, "t": 3.72, "pos": [3.83, 4.64]}
@@ -326,23 +334,31 @@
 {"type": "person", "tick": 308, "t": 6.16, "pos": [4.22, 3.01]}
 {"type": "person", "tick": 309, "t": 6.18, "pos": [4.22, 3.05]}
 {"type": "person", "tick": 310, "t": 6.2, "pos": null}
-{"type": "wake", "t": 6.22, "turn": 3, "reasons": ["departure"], "message": "{\"t\": 6.22}"}
-{"type": "call", "turn": 3, "tick": 311, "t": 6.22, "name": "stop", "args": null, "result": {"ok": true, "t": 6.22}}
-{"type": "call", "turn": 3, "tick": 312, "t": 6.24, "name": "set_color", "args": {"rgb": [20, 20, 40]}, "result": {"ok": true, "t": 6.24}}
-{"type": "call", "turn": 3, "tick": 313, "t": 6.26, "name": "play", "args": {"tracks": [{"pins": [[8, 8]], "keyframes": [[0, 1], [1, 0]]}]}, "result": {"ok": false, "t": 6.26, "error": "That point does not exist in your body."}}
-{"type": "turn_end", "t": 6.28, "turn": 3, "tool_calls": 3, "capped": false, "skipped": false}
+{"type": "wake", "t": 8.22, "turn": 3, "reasons": ["departure"], "message": "{\"t\": 8.22}"}
+{"type": "usage", "t": 8.22, "turn": 3, "model": "scripted", "stop_reason": "tool_use", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 8.22, "turn": 3, "kind": "text", "text": "scripted turn 3, step 5"}
+{"type": "call", "turn": 3, "tick": 411, "t": 8.22, "name": "stop", "args": null, "result": {"ok": true, "t": 8.22}}
+{"type": "call", "turn": 3, "tick": 412, "t": 8.24, "name": "set_color", "args": {"rgb": [20, 20, 40]}, "result": {"ok": true, "t": 8.24}}
+{"type": "call", "turn": 3, "tick": 413, "t": 8.26, "name": "play", "args": {"tracks": [{"pins": [[8, 8]], "keyframes": [[0, 1], [1, 0]]}]}, "result": {"ok": false, "t": 8.26, "error": "That point does not exist in your body."}}
+{"type": "usage", "t": 8.28, "turn": 3, "model": "scripted", "stop_reason": "end_turn", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 8.28, "turn": 3, "kind": "text", "text": "scripted turn 3, step 6"}
+{"type": "turn_end", "t": 8.28, "turn": 3, "tool_calls": 3, "capped": false, "skipped": false}
 {"type": "person", "tick": 460, "t": 9.2, "pos": [4.16, 2.32]}
 {"type": "wake", "t": 9.22, "turn": 4, "reasons": ["arrival"], "message": "{\"t\": 9.22}"}
+{"type": "usage", "t": 9.22, "turn": 4, "model": "scripted", "stop_reason": "tool_use", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 9.22, "turn": 4, "kind": "text", "text": "scripted turn 4, step 7"}
 {"type": "person", "tick": 461, "t": 9.22, "pos": [4.14, 2.31]}
 {"type": "call", "turn": 4, "tick": 461, "t": 9.22, "name": "play", "args": {"tracks": "breathe"}, "result": {"ok": false, "t": 9.22, "error": "That movement cannot be understood."}}
 {"type": "person", "tick": 462, "t": 9.24, "pos": [4.13, 2.3]}
-{"type": "call", "turn": 4, "tick": 462, "t": 9.24, "name": "sense", "args": null, "result": {"t": 9.24, "actual": [[0.1, 0.1, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.1, 0.1, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.25, 0.25, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.43, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.59]], "gap": [[0.34, 0.34, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05], [0.34, 0.34, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.19, 0.05, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.03, 0.03, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.73, 0.05], [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.32]], "person": [4.1, 2.3], "color": [20, 20, 40]}}
+{"type": "call", "turn": 4, "tick": 462, "t": 9.24, "name": "sense", "args": null, "result": {"t": 9.24, "actual": [[0.1, 0.1, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.1, 0.1, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.25, 0.25, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 1.0, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.59]], "gap": [[0.34, 0.34, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05], [0.34, 0.34, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.19, 0.05, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.03, 0.03, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05], [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.73, 0.05], [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.32]], "person": [4.1, 2.3], "color": [20, 20, 40]}}
 {"type": "person", "tick": 463, "t": 9.26, "pos": [4.11, 2.29]}
 {"type": "call", "turn": 4, "tick": 463, "t": 9.26, "name": "play", "args": {"tracks": [{"pins": "all", "keyframes": [[0, 0], [1, 1]], "delay_s": Infinity}]}, "result": {"ok": false, "t": 9.26, "error": "That movement cannot be understood."}}
 {"type": "person", "tick": 464, "t": 9.28, "pos": [4.09, 2.29]}
 {"type": "call", "turn": 4, "tick": 464, "t": 9.28, "name": "play", "args": {"tracks": [{"pins": "all", "keyframes": [[0, -1], [0.75, 2], [1.5, 0.5]], "ease": "smooth"}]}, "result": {"ok": true, "t": 9.28}}
 {"type": "person", "tick": 465, "t": 9.3, "pos": [4.07, 2.29]}
-{"type": "call", "turn": 4, "tick": 465, "t": 9.3, "name": "sense", "args": {}, "result": {"t": 9.3, "actual": [[0.1, 0.1, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.1, 0.1, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.25, 0.25, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.43, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.59]], "gap": [[0.1, 0.1, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.1, 0.1, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.25, 0.25, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.43, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.59]], "person": [4.1, 2.3], "color": [20, 20, 40]}}
+{"type": "call", "turn": 4, "tick": 465, "t": 9.3, "name": "sense", "args": {}, "result": {"t": 9.3, "actual": [[0.1, 0.1, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.1, 0.1, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.25, 0.25, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 1.0, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.59]], "gap": [[0.1, 0.1, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.1, 0.1, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.25, 0.25, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 1.0, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.59]], "person": [4.1, 2.3], "color": [20, 20, 40]}}
+{"type": "usage", "t": 9.32, "turn": 4, "model": "scripted", "stop_reason": "end_turn", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 9.32, "turn": 4, "kind": "text", "text": "scripted turn 4, step 8"}
 {"type": "turn_end", "t": 9.32, "turn": 4, "tool_calls": 5, "capped": false, "skipped": false}
 {"type": "person", "tick": 466, "t": 9.32, "pos": [4.05, 2.29]}
 {"type": "person", "tick": 467, "t": 9.34, "pos": [4.03, 2.29]}
@@ -378,19 +394,21 @@
 {"type": "person", "tick": 497, "t": 9.94, "pos": [3.16, 2.81]}
 {"type": "person", "tick": 498, "t": 9.96, "pos": [3.13, 2.85]}
 {"type": "person", "tick": 499, "t": 9.98, "pos": [3.1, 2.88]}
-{"type": "state", "tick": 500, "t": 10.0, "hash": "ea67f203df296b9c"}
+{"type": "state", "tick": 500, "t": 10.0, "hash": "fff822b020c0137f"}
 {"type": "voice", "tick": 500, "t": 10.0, "text": "you moved?"}
 {"type": "person", "tick": 500, "t": 10.0, "pos": [3.08, 2.91]}
-{"type": "wake", "t": 10.02, "turn": 5, "reasons": ["voice"], "message": "{\"t\": 10.02}"}
+{"type": "wake", "t": 10.02, "turn": 5, "reasons": ["voice"], "message": "{\"t\": 10.02, \"heard\": [\"you moved?\"]}"}
+{"type": "usage", "t": 10.02, "turn": 5, "model": "scripted", "stop_reason": "tool_use", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 10.02, "turn": 5, "kind": "text", "text": "scripted turn 5, step 9"}
 {"type": "person", "tick": 501, "t": 10.02, "pos": [3.05, 2.95]}
-{"type": "call", "turn": 5, "tick": 501, "t": 10.02, "name": "sense", "args": {}, "result": {"t": 10.02, "actual": [[0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95]], "gap": [[0.17, 0.17, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.17, 0.17, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.25, 0.25, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.43, 0.79], [0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.59]], "person": [3.0, 3.0], "color": [20, 20, 40]}}
+{"type": "call", "turn": 5, "tick": 501, "t": 10.02, "name": "sense", "args": {}, "result": {"t": 10.02, "actual": [[0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95], [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95]], "gap": [[0.17, 0.17, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.17, 0.17, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.25, 0.25, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 1.0, 0.21], [0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.21, 0.59]], "person": [3.0, 3.0], "color": [20, 20, 40]}}
 {"type": "person", "tick": 502, "t": 10.04, "pos": [3.03, 2.98]}
-{"type": "call", "turn": 5, "tick": 502, "t": 10.04, "name": "play", "args": {"tracks": [{"pins": [[0, 0], [0, 1], [1, 0], [1, 1]], "keyframes": [[0, 0], [0.4, 1], [0.8, 0.1]], "ease": "linear", "delay_s": 0.5}, {"pins": [[7, 7], [6, 6]], "keyframes": [[0, 1], [1.5, 0.3]], "loop": true}, {"pins": [[7, 7]], "keyframes": [[0, 0.5], [0.25, 0.9], [0.5, 0.5]], "loop": true}]}, "result": {"ok": true, "t": 10.04}}
+{"type": "call", "turn": 5, "tick": 502, "t": 10.04, "name": "set_color", "args": {"rgb": [255, 255, 255]}, "result": {"ok": true, "t": 10.04}}
+{"type": "usage", "t": 10.06, "turn": 5, "model": "scripted", "stop_reason": "end_turn", "input_tokens": 0, "output_tokens": 0}
+{"type": "thought", "t": 10.06, "turn": 5, "kind": "text", "text": "scripted turn 5, step 10"}
+{"type": "turn_end", "t": 10.06, "turn": 5, "tool_calls": 2, "capped": false, "skipped": false}
 {"type": "person", "tick": 503, "t": 10.06, "pos": [3.0, 3.02]}
-{"type": "call", "turn": 5, "tick": 503, "t": 10.06, "name": "stop", "args": {"pins": [[4, 4], [4, 5]]}, "result": {"ok": true, "t": 10.06}}
 {"type": "person", "tick": 504, "t": 10.08, "pos": [2.98, 3.05]}
-{"type": "call", "turn": 5, "tick": 504, "t": 10.08, "name": "fly", "args": {"to": "the moon"}, "result": {"ok": false, "t": 10.08, "error": "That cannot be understood."}}
-{"type": "turn_end", "t": 10.1, "turn": 5, "tool_calls": 4, "capped": false, "skipped": false}
 {"type": "person", "tick": 505, "t": 10.1, "pos": [2.96, 3.09]}
 {"type": "person", "tick": 506, "t": 10.12, "pos": [2.94, 3.13]}
 {"type": "person", "tick": 507, "t": 10.14, "pos": [2.92, 3.17]}
@@ -583,5 +601,5 @@
 {"type": "person", "tick": 697, "t": 13.94, "pos": [3.33, 2.99]}
 {"type": "person", "tick": 698, "t": 13.96, "pos": [3.36, 3.03]}
 {"type": "person", "tick": 699, "t": 13.98, "pos": [3.39, 3.06]}
-{"type": "state", "tick": 700, "t": 14.0, "hash": "df99734b184e3cbe"}
+{"type": "state", "tick": 700, "t": 14.0, "hash": "e9d927234aa0dc8e"}
 {"type": "close", "t": 14.0, "reason": "window_closed", "turns": 5, "input_tokens": 0, "output_tokens": 0}

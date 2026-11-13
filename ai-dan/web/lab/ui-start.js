@@ -19,6 +19,14 @@ export function safeStorage() {
 
 const describe = (err) => (err instanceof Error ? err.message : String(err));
 
+/** A secret's value, taken out of its field: the page keeps it only in the
+ * session it starts, never in the form, the DOM or storage. */
+export function takeValue(input) {
+  const value = input.value.trim();
+  input.value = "";
+  return value;
+}
+
 export class StartScreen {
   /**
    * handlers: onWatch(), onWake({apiKey | accessCode, memory}), onDryrun(),
@@ -86,6 +94,8 @@ export class StartScreen {
 
   show() {
     this.el.hidden = false;
+    this.keyInput.value = "";
+    this.codeInput.value = "";
     this.setError(null);
     document.getElementById("watch").focus({ preventScroll: true });
   }
@@ -139,12 +149,12 @@ export class StartScreen {
 
   _wake() {
     const memory = this.memory.checked;
+    const apiKey = takeValue(this.keyInput);
+    const accessCode = takeValue(this.codeInput);
     if (this._useCode()) {
-      const accessCode = this.codeInput.value.trim();
       if (!accessCode) return this.setError("Type the access code first.");
       return this._run(() => this.handlers.onWake({ accessCode, memory }));
     }
-    const apiKey = this.keyInput.value.trim();
     if (!apiKey) return this.setError("Paste your Anthropic API key first.");
     return this._run(() => this.handlers.onWake({ apiKey, memory }));
   }

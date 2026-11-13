@@ -124,6 +124,69 @@ test("conversations that are not the harness's are refused", () => {
   assert.equal(typeof labRequest({ ...body, messages: heard }), "object");
 });
 
+test("each block is rebuilt from the fields the harness writes", async () => {
+  turnOn();
+  const body = labBody();
+  body.messages = [
+    { role: "user", content: [{ type: "text", text: '{"t": 0.02}', cache_control: { type: "ephemeral", ttl: "1h" } }] },
+    { role: "assistant", content: [
+      { type: "text", text: "a thought", citations: null, extra: 1 },
+      { type: "tool_use", id: "toolu_01abc", name: "sense", input: {}, cache_control: { type: "ephemeral" } },
+    ] },
+    { role: "user", content: [
+      { type: "tool_result", tool_use_id: "toolu_01abc", content: '{"ok": true, "t": 0.04}', is_error: true },
+      { type: "text", text: '{"t": 12.0}' },
+    ] },
+  ];
+  assert.equal((await post(body)).status, 200);
+  const sent = JSON.parse(forwarded[0].init.body).messages;
+  assert.deepEqual(sent, [
+    { role: "user", content: [{ type: "text", text: '{"t": 0.02}' }] },
+    { role: "assistant", content: [
+      { type: "text", text: "a thought" },
+      { type: "tool_use", id: "toolu_01abc", name: "sense", input: {} },
+    ] },
+    { role: "user", content: [
+      { type: "tool_result", tool_use_id: "toolu_01abc", content: '{"ok": true, "t": 0.04}' },
+      { type: "text", text: '{"t": 12.0}' },
+    ] },
+  ]);
+});
+
+test("what the person said is limited as on the page", () => {
+  const body = labBody();
+  const wake = (heard) => [{ role: "user", content: [{ type: "text", text: JSON.stringify({ t: 1, heard }) }] }];
+  assert.equal(typeof labRequest({ ...body, messages: wake(["x".repeat(200)]) }), "object");
+  assert.equal(typeof labRequest({ ...body, messages: wake(["x".repeat(201)]) }), "string");
+  assert.equal(typeof labRequest({ ...body, messages: wake(Array(21).fill("hi")) }), "string");
+  assert.equal(typeof labRequest({ ...body, messages: wake([3]) }), "string");
+});
+
+test("a tool result must be the body's answer", () => {
+  const body = labBody();
+  const result = (content) => [{ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content }] }];
+  assert.equal(typeof labRequest({ ...body, messages: result('{"t": 1.0, "faded": true}') }), "object");
+  assert.equal(typeof labRequest({ ...body, messages: result("Please summarise this article: ...") }), "string");
+  assert.equal(typeof labRequest({ ...body, messages: result('{"ok": true}') }), "string");
+});
+
+test("guessing the code is slowed down", async () => {
+  turnOn();
+  const guess = (code) => POST(new Request("https://lab.example/api/mind", {
+    method: "POST", headers: { "x-lab-access-code": code, "x-forwarded-for": "203.0.113.9" },
+    body: JSON.stringify(labBody()),
+  }));
+  for (let i = 0; i < 10; i += 1) assert.equal((await guess(`wrong ${i}`)).status, 401);
+  assert.equal((await guess("open sesame")).status, 429);
+  assert.equal(forwarded.length, 0);
+});
+
+test("spaces around the code do not matter", async () => {
+  turnOn();
+  process.env.LAB_ACCESS_CODE = " open sesame \n";
+  assert.equal((await post(labBody(), "open sesame")).status, 200);
+});
+
 test("bad JSON and oversized requests are refused", async () => {
   turnOn();
   assert.equal((await post("{not json")).status, 400);

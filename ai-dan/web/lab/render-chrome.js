@@ -331,6 +331,7 @@ function helpRows(view) {
     ["mouse", "move in the room; hold the button on a pin to press it"],
     ["typing", "your voice; Enter says the line"],
     ["Tab", "observer panel: the mind's private side"],
+    ["Shift+Tab", "to the buttons below; Tab moves between them"],
     ["F1", "this help"],
     ["F2", "hide all text, for clean recordings"],
     ["F11", "fullscreen"],

@@ -12,8 +12,9 @@ import {
   Observer, callLine, clock, draw, drawBody, entryItems, isWiringTest, layout, makeView, mindFailing, mindStatus,
   pinFace, restingSnapshot, statusY, tokenText, typingY,
 } from "../lab/render.js";
-import { FixedStep, MAX_CATCH_UP, Pointer, STEP_S } from "../lab/ui-loop.js";
-import { MAX_LINE, Session, cleanLine } from "../lab/ui-session.js";
+import { FixedStep, HIDDEN_CATCH_UP, MAX_CATCH_UP, Pointer, STEP_S, keyAction } from "../lab/ui-loop.js";
+import { MAX_LINE, Session, cleanLine, notALog } from "../lab/ui-session.js";
+import { takeValue } from "../lab/ui-start.js";
 
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/render.json", import.meta.url), "utf8"));
 const firstWake = readFileSync(new URL("../sessions/first-wake.jsonl", import.meta.url), "utf8")
@@ -377,6 +378,100 @@ test("shutting down closes the world, then the mind, then the log, once", async 
   s.advance(6);
   assert.equal(world.ticks.length, before, "no ticks after the end");
   assert.equal(s.view.cursor, null, "the person has left the room");
+});
+
+test("a hidden tab keeps time with the wall clock, up to a minute per wake, with nobody in the room", () => {
+  const { world, harness, log } = fakeLive();
+  const s = new Session({ kind: "live", world, harness, log, view: makeView() });
+  s.layout = LAY;
+  s.pointer.down(...pinPx(4, 4), "mouse");     // even if the pointer still says someone is here
+  s.advance(0);
+  s.advance(30, { hidden: true });
+  assert.ok(Math.abs(world.ticks.length - 1500) <= 1, `${world.ticks.length} ticks for 30 s`);
+  assert.ok(world.ticks.every(([person, pressed]) => person === null && pressed === null), "nobody is in the room");
+  const before = world.ticks.length;
+  s.advance(150, { hidden: true });
+  assert.equal(world.ticks.length - before, HIDDEN_CATCH_UP, "a two-minute gap runs one minute, the rest is dropped");
+  assert.equal(HIDDEN_CATCH_UP * STEP_S, 60);
+  assert.ok(s.stepper.backlog <= STEP_S);
+  s.advance(150.05);
+  assert.notEqual(world.ticks.at(-1)[0], null, "back in view, the pointer counts again");
+});
+
+test("downloads: the log counts as saved only while it has not grown since", () => {
+  const lines = ['{"type": "header"}'];
+  const log = { text: () => lines.map((l) => `${l}\n`).join(""), fileName: () => "2026-11-12_101500.jsonl" };
+  const { world, harness } = fakeLive();
+  const s = new Session({ kind: "live", world, harness, log, view: makeView() });
+  assert.equal(s.unsaved, true, "nothing downloaded yet");
+  const file = s.logFile();
+  assert.equal(file.name, "2026-11-12_101500.jsonl");
+  assert.equal(file.text, '{"type": "header"}\n');
+  assert.equal(s.unsaved, false);
+  lines.push('{"type": "state"}', '{"type": "close"}');
+  assert.equal(s.unsaved, true, "a download taken mid-session is not the whole log");
+  s.logFile();
+  assert.equal(s.unsaved, false);
+});
+
+test("a mind that ended by itself is no longer running, though the room may go on", () => {
+  const { world, harness, log } = fakeLive();
+  const obs = observe([HEADER, WAKE]);
+  const s = new Session({ kind: "live", world, harness, log, view: makeView({ observer: obs }) });
+  assert.equal(s.running, true);
+  assert.equal(s.mindEnded, false);
+  obs.add({ type: "close", t: 900, reason: "max_minutes", turns: 12, input_tokens: 1, output_tokens: 1 });
+  assert.equal(s.mindEnded, true);
+  assert.equal(s.running, false);
+  assert.equal(s.halted, false, "the world keeps ticking, as on the desktop");
+  const dry = new Session({ kind: "dryrun", world, harness, log, view: makeView({ mode: "dryrun" }) });
+  assert.equal(dry.running, false, "a wiring test is never a mind to lose");
+});
+
+test("what a key does in the room", () => {
+  const live = (key, more = {}) => keyAction({ key, ...more });
+  assert.equal(live("Tab"), "panel");
+  assert.equal(live("Tab", { typing: true }), "panel", "Tab opens the observer from the typing line");
+  assert.equal(live("Tab", { shift: true }), null, "Shift+Tab reaches the buttons");
+  assert.equal(live("Tab", { onControl: true }), null, "a focused button keeps Tab");
+  assert.equal(live("Tab", { ctrl: true }), null);
+  assert.equal(live("F1", { onControl: true }), "help");
+  assert.equal(live("F2"), "clean");
+  assert.equal(live("Escape", { helpOpen: true }), "close-help");
+  assert.equal(live("Escape"), null);
+  assert.equal(live("a"), "type", "letters are never shortcuts");
+  assert.equal(live("a", { onControl: true }), "type");
+  assert.equal(live(" ", { onControl: true }), null, "Space presses a focused button");
+  assert.equal(live("Enter", { onControl: true }), null);
+  assert.equal(live("a", { typing: true }), null, "already typing");
+  assert.equal(live("c", { ctrl: true }), null);
+  assert.equal(live("Process"), "type", "an input method starting");
+  assert.equal(live(" ", { replay: true }), "pause");
+  assert.equal(live(" ", { replay: true, onControl: true }), null);
+  assert.equal(live("a", { replay: true }), null, "a replay has no voice");
+});
+
+test("a damaged log is called what it is", async () => {
+  assert.equal(notALog(new TypeError("Cannot read properties of null (reading 'type')")).message,
+    "not a session log (Cannot read properties of null (reading 'type'))");
+  assert.equal(notALog(new Error("not a session log: no header line")).message, "not a session log: no header line");
+  const { ReplayWorld } = await import("../lab/world.js");
+  for (const events of [[firstWake[0], null, ...firstWake.slice(1)], firstWake.slice(1)]) {
+    let caught = null;
+    try {
+      new ReplayWorld(events);
+    } catch (err) {
+      caught = notALog(err);
+    }
+    assert.match(caught?.message ?? "", /^not a session log/);
+  }
+});
+
+test("a secret is taken out of its field when it is read", () => {
+  const field = { value: "  sk-ant-example  " };
+  assert.equal(takeValue(field), "sk-ant-example");
+  assert.equal(field.value, "");
+  assert.equal(takeValue(field), "");
 });
 
 test("the first waking replays to its end with the same body states", async () => {

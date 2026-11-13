@@ -1,0 +1,97 @@
+[
+  {
+    "name": "basic_fading_floats_unicode",
+    "config": {},
+    "dtPerCall": 0.0,
+    "script": [
+      {"r": [{"type": "thinking", "thinking": "what is this", "signature": "s1"}, {"type": "text", "text": "let me feel"}, {"type": "tool_use", "id": "toolu_a1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "thinking", "thinking": "", "signature": "s2"}, {"type": "tool_use", "id": "toolu_a2", "name": "play", "input": {"tracks": [{"pins": "all", "keyframes": [[0, 0.0], [1.0, 1], [2.50, 0.5]], "delay_s": 0.0}]}}, {"type": "tool_use", "id": "toolu_a3", "name": "set_color", "input": {"rgb": [1, 2.0, 3]}}]},
+      {"r": [{"type": "text", "text": "enough"}]},
+      {"r": [{"type": "text", "text": "　 "}, {"type": "tool_use", "id": "toolu_b1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "text", "text": "﻿"}, {"type": "thinking", "thinking": "​", "signature": "s3"}]},
+      {"r": [{"type": "tool_use", "id": "toolu_c1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "text", "text": "x"}]},
+      {"r": [{"type": "tool_use", "id": "toolu_d1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "text", "text": "\u001c"}]},
+      {"r": [{"type": "tool_use", "id": "toolu_e1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "text", "text": "y"}]},
+      {"r": [{"type": "tool_use", "id": "toolu_f1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "text", "text": "z"}]},
+      {"r": [{"type": "tool_use", "id": "toolu_g1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "text", "text": "w"}]},
+      {"r": [{"type": "tool_use", "id": "toolu_h1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "text", "text": "v"}]},
+      {"r": [{"type": "tool_use", "id": "toolu_i1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "text", "text": "u"}]}
+    ],
+    "ops": [
+      ["say", "before"], ["enter"], ["step"],
+      ["t", 12.5], ["say", "héllo 🙂 \"q\" \\ \n"], ["step"],
+      ["t", 24.07], ["step"], ["t", 36.1], ["step"], ["t", 48.0], ["step"],
+      ["t", 60.0], ["step"], ["t", 72.0], ["step"], ["t", 84.0], ["step"],
+      ["t", 96.0], ["step"], ["t", 108.0], ["step"], ["t", 120.0], ["step"],
+      ["stop"]
+    ]
+  },
+  {
+    "name": "cap_and_join",
+    "config": {},
+    "dtPerCall": 0.5,
+    "callS": 0.02,
+    "script": [
+      {"r": [{"type": "tool_use", "id": "k1", "name": "sense", "input": {}}, {"type": "tool_use", "id": "k2", "name": "stop", "input": {}}, {"type": "tool_use", "id": "k3", "name": "fly", "input": {"to": "moon"}}]},
+      {"r": [{"type": "tool_use", "id": "k4", "name": "sense", "input": {}}, {"type": "tool_use", "id": "k5", "name": "stop", "input": {"pins": "all"}}, {"type": "tool_use", "id": "k6", "name": "stop", "input": {}}]},
+      {"r": [{"type": "text", "text": "more"}, {"type": "tool_use", "id": "k7", "name": "sense", "input": {}}, {"type": "tool_use", "id": "k8", "name": "stop", "input": {}}, {"type": "tool_use", "id": "k9", "name": "stop", "input": {}}]},
+      {"r": [{"type": "text", "text": "after"}]},
+      {"r": [{"type": "text", "text": "half"}, {"type": "tool_use", "id": "m1", "name": "play", "input": {"tracks": [{"pins": "all"}]}}], "stop": "max_tokens"},
+      {"r": [{"type": "text", "text": "done"}]}
+    ],
+    "ops": [
+      ["enter"], ["step"], ["t", 13.0], ["step"], ["t", 30.0], ["step"], ["t", 50.0], ["step"], ["stop", "max_turns"]
+    ]
+  },
+  {
+    "name": "errors_refusal_join",
+    "config": {},
+    "dtPerCall": 1.0,
+    "script": [
+      {"r": [{"type": "thinking", "thinking": "hm", "signature": "x"}, {"type": "tool_use", "id": "e1", "name": "sense", "input": {}}]},
+      {"err": "overloaded", "retry": true},
+      {"err": "HTTP 400: bad", "retry": false},
+      {"r": [{"type": "text", "text": "no"}], "stop": "refusal"},
+      {"exc": "nope"},
+      {"err": "down", "retry": true},
+      {"err": "down", "retry": true},
+      {"err": "down", "retry": true},
+      {"err": "down", "retry": true},
+      {"r": [{"type": "text", "text": "again"}, {"type": "tool_use", "id": "e2", "name": "sense", "input": {}}]},
+      {"r": [{"type": "text", "text": "ok"}]}
+    ],
+    "ops": [
+      ["enter"], ["step"], ["t", 20.0], ["step"], ["t", 40.0], ["step"], ["t", 60.0], ["step"], ["t", 80.0], ["say", "x"], ["step"], ["stop"]
+    ]
+  },
+  {
+    "name": "presence",
+    "config": {"PULSE_S": 5.0, "ABSENCE_GRACE_S": 1.5, "MAX_TURNS": 6},
+    "dtPerCall": 0.25,
+    "script": [],
+    "ops": [
+      ["enter"], ["step"], ["t", 3.0], ["leave"], ["step"], ["t", 4.0], ["enter"], ["step"], ["t", 9.0], ["step"],
+      ["t", 10.0], ["leave"], ["t", 12.0], ["step"], ["t", 30.0], ["step"], ["enter"], ["step"], ["t", 40.0], ["step"],
+      ["t", 50.0], ["step"], ["t", 60.0], ["step"], ["t", 70.0], ["step"]
+    ]
+  },
+  {
+    "name": "max_minutes",
+    "config": {"MAX_SESSION_MIN": 0.5},
+    "dtPerCall": 10.0,
+    "script": [
+      {"r": [{"type": "tool_use", "id": "q1", "name": "sense", "input": {}}]},
+      {"r": [{"type": "tool_use", "id": "q2", "name": "sense", "input": {}}]},
+      {"r": [{"type": "tool_use", "id": "q3", "name": "sense", "input": {}}]},
+      {"r": [{"type": "tool_use", "id": "q4", "name": "sense", "input": {}}]}
+    ],
+    "ops": [["enter"], ["step"], ["step"], ["t", 100.0], ["step"], ["stop"]]
+  }
+]

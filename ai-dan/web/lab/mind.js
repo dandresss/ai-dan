@@ -150,7 +150,10 @@ export const NOTE_KEY = "ai-dan.note";
 
 export function loadNote(store) {
   if (!store) return null;
-  return store.getItem(NOTE_KEY) ?? null;
+  const note = store.getItem(NOTE_KEY);
+  if (note === null || note === undefined) return null;
+  // Python reads the note from a text file, where \r\n and \r become \n.
+  return note.replace(/\r\n?/g, "\n");
 }
 
 // Replace the note. Returns null on success, or the error message for the

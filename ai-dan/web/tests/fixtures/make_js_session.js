@@ -3,24 +3,25 @@
 //     cd web && node tests/fixtures/make_js_session.js
 //
 // Writes js-session.jsonl next to this file. A scripted person walks in,
-// touches the body, speaks, leaves and comes back; a scripted mind (not an AI,
-// and labelled so in the header) answers through `world.remoteBody()`, as the
-// harness does. ../../tests/test_web_interop.py replays the file with
-// lab.world.verify_log: same results, same state hashes, or the port is wrong.
+// touches the body, speaks, leaves and comes back, on a real World; the real
+// Harness wakes a scripted mind (not an AI, and labelled so in the header) and
+// carries its calls to the body. ../../tests/test_web_interop.py replays the
+// file with lab.world.verify_log: same results, same state hashes, or the port
+// is wrong, and every line is what json.dumps writes.
 //
-// Nothing here reads the wall clock: the header's started_at is fixed, so the
-// file is the same every time it is made.
+// Nothing here reads the wall clock or waits on a timer: the header's
+// started_at is fixed and the clock is the tick count, so the file is the same
+// every time it is made.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { Config } from "../../lab/config.js";
+import { Harness } from "../../lab/harness.js";
 import { SessionLog } from "../../lab/log.js";
-import { pyDumps } from "../../lab/py.js";
 import { World } from "../../lab/world.js";
 
 const OUT = new URL("./js-session.jsonl", import.meta.url);
-const TOOLS = ["play", "stop", "sense", "set_color"];
 const TICKS = 720;
 
 // The person: arrives at tick 20, walks in, touches two pins, speaks, leaves
@@ -40,14 +41,17 @@ function pressed(k) {
 
 const VOICES = { 200: "  hello there  ", 210: "   ", 520: "you moved?" };
 
-// The mind's moves, by turn. The scripted mind is deliberately mechanical.
-const TURNS = {
-  arrival: [
+// What the scripted mind does in each turn it is woken for: arrival, the first
+// voice, the departure, the return, the second voice. Deliberately awkward
+// calls are in here on purpose (an unknown tool, null arguments, a number too
+// large for a float): the body must answer them exactly as the Python one does.
+const TURNS = [
+  [
     ["sense", {}],
     ["play", { tracks: [{ pins: "all", keyframes: [[0, 0.2], [2, 0.8], [4, 0.2]], loop: true }] }],
     ["set_color", { rgb: [80, 160, 255] }],
   ],
-  voice: [
+  [
     ["sense", {}],
     ["play", { tracks: [
       { pins: [[0, 0], [0, 1], [1, 0], [1, 1]], keyframes: [[0, 0], [0.4, 1], [0.8, 0.1]], ease: "linear", delay_s: 0.5 },
@@ -56,79 +60,75 @@ const TURNS = {
     ["stop", { pins: [[4, 4], [4, 5]] }],
     ["fly", { to: "the moon" }],
   ],
-  departure: [
+  [
     ["stop", null],
     ["set_color", { rgb: [20, 20, 40.0] }],
     ["play", { tracks: [{ pins: [[8, 8]], keyframes: [[0, 1], [1, 0]] }] }],
   ],
-  return: [
+  [
     ["play", { tracks: "breathe" }],
     ["sense", null],
     ["play", { tracks: [{ pins: "all", keyframes: [[0, 0], [1, 1]], delay_s: Infinity }] }],   // a model's 1e400
     ["play", { tracks: [{ pins: "all", keyframes: [[0, -1], [0.75, 2], [1.5, 0.5]], ease: "smooth" }] }],
     ["sense", {}],
   ],
-};
+  [
+    ["sense", {}],
+    ["set_color", { rgb: [255, 255, 255] }],
+  ],
+];
+
+// A model that plays TURNS: each turn is one response with all its calls,
+// then one that ends the turn. It answers instantly, so the clock is the ticks.
+class ScriptedTurns {
+  constructor() {
+    this.name = "scripted";
+    this.turn = -1;
+    this.answered = false;
+    this.responses = 0;
+  }
+
+  async respond(system, tools, messages) {
+    const last = messages[messages.length - 1].content;
+    if (last.some((b) => b.type === "text")) {   // a wake begins a turn
+      this.turn += 1;
+      this.answered = false;
+    }
+    const moves = this.answered ? [] : (TURNS[this.turn] ?? []);
+    this.answered = true;
+    this.responses += 1;
+    const content = [{ type: "text", text: `scripted turn ${this.turn + 1}, step ${this.responses}` }];
+    moves.forEach(([name, args], i) => content.push({
+      type: "tool_use", id: `toolu_scripted_${this.turn + 1}_${i + 1}`, name, input: args,
+    }));
+    return {
+      content, stop_reason: moves.length ? "tool_use" : "end_turn", model: this.name,
+      input_tokens: 0, output_tokens: 0,
+    };
+  }
+}
 
 export async function makeJsSession() {
   const config = new Config();
   const log = new SessionLog({ now: () => new Date(2026, 10, 12, 12, 0, 0) });
   const world = new World(config, log);
-  const body = world.remoteBody();
-  const prompt = bundledPrompt(config);
+  const harness = new Harness(world, new ScriptedTurns(), config, { sleep: async () => {} });
+  harness.start({ runLoop: false });   // the header, first, before the person arrives
 
-  // As harness.js writes it: the header first, before the person arrives.
-  log.writeHeader(config, {
-    t: world.t, prompt_version: config.PROMPT_VERSION, prompt, model: "scripted",
-    tools: TOOLS, memory_enabled: config.MEMORY_ENABLED, mind: "scripted",
-  });
-
-  let turn = 0;
-  const harnessLog = (event) => log.write({ type: event.type, t: world.t, ...event });
-  async function runTurn(reasons, moves) {
-    turn += 1;
-    world.turn = turn;
-    harnessLog({ type: "wake", turn, reasons, message: pyDumps({ t: world.t }) });
-    for (const [name, args] of moves) await body.call(name, args);
-    harnessLog({ type: "turn_end", turn, tool_calls: moves.length, capped: false, skipped: false });
-  }
-
-  // The mind: listens on world.events, one turn at a time, like the harness.
-  let away = false;
-  let busy = Promise.resolve();
-  const listen = () => {
-    while (world.events.length > 0) {
-      const [kind] = world.events.shift();
-      if (kind === "enter") busy = busy.then(() => runTurn(["arrival"], away ? TURNS.return : TURNS.arrival));
-      if (kind === "voice") busy = busy.then(() => runTurn(["voice"], TURNS.voice));
-      if (kind === "leave") busy = busy.then(() => runTurn(["departure"], TURNS.departure));
-      away = away || kind === "leave";
-    }
-  };
-
+  // The window ticks; between ticks the mind looks at the world, as its loop
+  // does. A turn waits for the next tick to have its body calls answered.
+  let looking = null;
   for (let k = 0; k < TICKS; k++) {
     if (VOICES[k]) world.say(VOICES[k]);
     world.tick(person(k), pressed(k));
-    listen();
+    looking ??= harness.step().finally(() => { looking = null; });
     await new Promise((resolve) => setImmediate(resolve));   // let the mind take its answers
   }
 
   world.close();
-  await busy.catch(() => {});
-  log.write({ type: "close", t: world.t, reason: "window_closed", turns: turn, input_tokens: 0, output_tokens: 0 });
+  await harness.stop();
   log.close();
   return log.text();
-}
-
-// The system prompt of the bundled first session: same prompt version, and
-// the exact text the Python lab sends.
-function bundledPrompt(config) {
-  const first = readFileSync(new URL("../../sessions/first-wake.jsonl", import.meta.url), "utf8").split("\n")[0];
-  const header = JSON.parse(first);
-  if (header.prompt_version !== config.PROMPT_VERSION || header.config.LANGUAGE !== config.LANGUAGE) {
-    throw new Error("the bundled session was made with another prompt");
-  }
-  return header.prompt;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

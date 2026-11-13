@@ -2,7 +2,7 @@
 // answers instantly, and a model that plays a script and checks every message
 // list it is sent. Port of tests/harness_fakes.py.
 import assert from "node:assert/strict";
-import { pyDumps } from "../lab/py.js";
+import { pyDumps, pyStrip } from "../lab/py.js";
 
 const BODY_TOOLS = ["play", "stop", "sense", "set_color"];
 
@@ -108,7 +108,8 @@ export function use(name, args = null) {
 // function(messages) returning either. When the script runs out it answers
 // with a quiet end of turn.
 export class FakeModel {
-  constructor(script = [], { onCall = null } = {}) {
+  constructor(script = [], { onCall = null, validate = true } = {}) {
+    this.validate = validate;
     this.name = "fake";
     this.script = [...script];
     this.onCall = onCall;
@@ -118,7 +119,7 @@ export class FakeModel {
   }
 
   async respond(system, tools, messages) {
-    assertValid(messages);
+    if (this.validate) assertValid(messages);
     this.sent.push(structuredClone(messages));
     this.systems.push(system);
     this.tools.push(tools);
@@ -146,7 +147,7 @@ export function assertValid(messages) {
     assert.ok(i === 0 || m.role !== messages[i - 1].role, `message ${i} repeats a role`);
     assert.ok(m.content.length, `message ${i} is empty`);
     for (const b of m.content) {
-      if (b.type === "text") assert.ok(b.text.trim(), `message ${i} has an empty text block`);
+      if (b.type === "text") assert.ok(pyStrip(b.text), `message ${i} has an empty text block`);
       if (b.type === "thinking" || b.type === "redacted_thinking") {
         assert.ok(i > lastWake, `message ${i} replays a thinking block from a past turn`);
       }

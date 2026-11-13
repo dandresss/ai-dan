@@ -21,11 +21,6 @@
 <body>
 <canvas id="room" role="img" aria-label="The room: a body of 64 pins"></canvas>
 
-<form id="voice" class="voice empty" hidden autocomplete="off">
-  <input id="voice-input" type="text" maxlength="200" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" spellcheck="false" aria-label="Say something to it">
-  <small id="voice-hint" hidden>Enter to say it</small>
-</form>
-
 <nav id="controls" class="controls" hidden aria-label="Session">
   <button type="button" data-act="pause" aria-pressed="false">Pause</button>
   <button type="button" data-act="speed">Speed 1×</button>
@@ -39,6 +34,11 @@
   <button type="button" data-act="back">Back to start</button>
 </nav>
 <button type="button" id="show-text" class="show-text" hidden aria-keyshortcuts="F2">Show text</button>
+
+<form id="voice" class="voice empty" hidden autocomplete="off">
+  <input id="voice-input" type="text" maxlength="200" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" spellcheck="false" aria-label="Say something to it">
+  <small id="voice-hint" hidden>Enter to say it</small>
+</form>
 
 <main id="start" class="start">
   <div class="card">
@@ -63,7 +63,7 @@
         <div id="key-row" class="field">
           <label for="api-key">Your Anthropic API key</label>
           <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
-          <p class="small">The key is sent only to api.anthropic.com, straight from this browser. It is not stored anywhere, and closing the tab forgets it. You pay for the tokens the mind uses.</p>
+          <p class="small">The key is sent only to api.anthropic.com, straight from this browser. It is never stored: the field empties when the session starts, and the page keeps the key only for that session. You pay for the tokens the mind uses.</p>
         </div>
         <div id="code-row" class="field" hidden>
           <label for="access-code">Access code</label>

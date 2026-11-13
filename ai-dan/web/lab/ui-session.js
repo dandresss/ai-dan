@@ -16,6 +16,12 @@ export function cleanLine(text) {
   return kept.slice(0, MAX_LINE).join("").trim();
 }
 
+/** A log that cannot be replayed, in the words the page uses for it. */
+export function notALog(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  return new Error(message.startsWith("not a session log") ? message : `not a session log (${message})`);
+}
+
 export class Session {
   /**
    * kind   "replay", "live" or "dryrun"
@@ -35,7 +41,8 @@ export class Session {
     this.pointer = new Pointer();
     this.layout = layout({ width: 1280, height: 800, dpr: 1 }, false);
     this.halted = false;         // no more ticks: shut down, or broken
-    this.downloaded = false;
+    this.hidden = false;         // the tab is in the background: nobody is in the room
+    this.savedLength = 0;        // how much of the log the visitor has downloaded
     this.lastNow = null;
   }
 
@@ -43,9 +50,26 @@ export class Session {
     return this.kind === "replay";
   }
 
-  /** A live mind that has not been shut down: leaving the page loses it. */
+  /** The mind has written `close`, by itself or because it was stopped. */
+  get mindEnded() {
+    return this.view.observer.status === "ended";
+  }
+
+  /** A live session whose mind is still there: leaving the page loses it. */
   get running() {
-    return this.kind === "live" && !this.halted;
+    return this.kind === "live" && !this.halted && !this.mindEnded;
+  }
+
+  /** The log holds more than the visitor last downloaded. */
+  get unsaved() {
+    return Boolean(this.log) && this.log.text().length !== this.savedLength;
+  }
+
+  /** The log as a file to download; what it holds now counts as saved. */
+  logFile() {
+    const text = this.log.text();
+    this.savedLength = text.length;
+    return { text, name: this.log.fileName() };
   }
 
   /**
@@ -53,6 +77,7 @@ export class Session {
    * view up to date. `hidden` is a tab in the background, woken by a timer.
    */
   advance(now, { hidden = false } = {}) {
+    this.hidden = hidden;
     const view = this.view;
     const world = this.world;
     const dt = this.lastNow === null ? 0 : Math.max(0, now - this.lastNow);
@@ -88,6 +113,10 @@ export class Session {
     if (this.replay) {
       if (world.done) return false;
       world.tick();
+      return true;
+    }
+    if (this.hidden) {
+      world.tick(null, null);
       return true;
     }
     const { GRID_ROWS, GRID_COLS } = world.config;
