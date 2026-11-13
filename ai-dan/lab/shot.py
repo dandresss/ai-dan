@@ -1,7 +1,7 @@
 """Headless screenshots of canned scenes, for checking the drawing and for the README.
 
-    python -m lab.shot <scene> <out.png> [--size 1280x800]
-    python -m lab.shot all <directory>
+    uv run python -m lab.shot <scene> <out.png> [--size 1280x800]
+    uv run python -m lab.shot all <directory>
 
 Scenes are built by hand from `Snapshot` objects, so they need no body, no
 mind and no screen.
@@ -173,7 +173,7 @@ def render_scene(name: str, size: tuple = (1280, 800)) -> pygame.Surface:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m lab.shot", description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(prog="uv run python -m lab.shot", description=__doc__.splitlines()[0])
     ap.add_argument("scene", help="one of: " + ", ".join(SCENES) + ", or all")
     ap.add_argument("out", help="PNG file, or a directory with `all`")
     ap.add_argument("--size", default="1280x800")

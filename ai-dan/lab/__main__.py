@@ -1,9 +1,9 @@
-"""python -m lab: open the room.
+"""Open the room. `main.py` at the project root calls this.
 
-    python -m lab                     a live session (needs ANTHROPIC_API_KEY in .env)
-    python -m lab --dry-run           the whole loop with a scripted mind: a wiring test, not an AI
-    python -m lab --replay FILE       watch a recorded session again, without the API
-    python -m lab --verify FILE       check that a log replays to the same body states
+    uv run python main.py                  a live session (needs ANTHROPIC_API_KEY in .env)
+    uv run python main.py --dry-run        the whole loop with a scripted mind: a wiring test, not an AI
+    uv run python main.py --replay FILE    watch a recorded session again, without the API
+    uv run python main.py --verify FILE    check that a log replays to the same body states
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 def _parse(argv):
-    ap = argparse.ArgumentParser(prog="python -m lab", description="A body to wake up in: the virtual lab.",
+    ap = argparse.ArgumentParser(prog="uv run python main.py", description="A body to wake up in: the virtual lab.",
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog="keys: Tab observer panel, F1 help, F2 hide text, F11 fullscreen, Esc quit")
     mode = ap.add_mutually_exclusive_group()

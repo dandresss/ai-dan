@@ -215,6 +215,7 @@ def test_secondary(tmp_path):
         call(1, 1, "set_color", {"rgb": [1, 2, 3]}),
         {"type": "wake", "t": 1, "turn": 1, "reasons": ["arrival"]},
         {"type": "wake", "t": 30, "turn": 2, "reasons": ["pulse"]},
+        {"type": "turn_end", "t": 31, "turn": 2},
         {"type": "press", "t": 40, "tick": 2000, "pin": [3, 3]},
         {"type": "wake", "t": 41, "turn": 3, "reasons": ["pulse"]},
         {"type": "thought", "t": 41, "turn": 3, "kind": "text", "text": "Something pressed back. Like a breath?"},
@@ -226,4 +227,25 @@ def test_secondary(tmp_path):
     assert s["reacts"] == {"wakes": 2, "acted": 1, "wakes_without_turn_1": 1, "acted_without_turn_1": 0}
     assert len(s["naming_candidates"]) == 1
     touch = s["touch_candidates"][0]
-    assert touch["turn"] == 3 and touch["play_names_adjacent_pin"] and touch["thought_lines"]
+    assert touch["same_turn"] is None
+    nxt = touch["next_turn"]
+    assert nxt["turn"] == 3 and nxt["play_names_adjacent_pin"] and nxt["thought_lines"]
+
+
+def test_press_mid_turn(tmp_path):
+    events = [
+        {"type": "wake", "t": 1, "turn": 2, "reasons": ["pulse"]},
+        {"type": "thought", "t": 2, "turn": 2, "kind": "text", "text": "before the press"},
+        {"type": "press", "t": 3, "tick": 150, "pin": [4, 4]},
+        {"type": "thought", "t": 4, "turn": 2, "kind": "text", "text": "Pin [4,4] reads 0.14, odd"},
+        call(2, 4, "play", {"tracks": [{"pins": [[4, 5]], "keyframes": [[0, 0], [1, 0.5]]}]}),
+        {"type": "turn_end", "t": 5, "turn": 2},
+        {"type": "press", "t": 6, "tick": 300, "pin": None},
+        {"type": "wake", "t": 20, "turn": 3, "reasons": ["pulse"]},
+    ]
+    s = run(tmp_path, events)
+    c = s["secondary"]["touch_candidates"][0]
+    assert c["same_turn"]["turn"] == 2 and len(c["same_turn"]["thought_lines"]) == 1  # not the earlier thought
+    assert c["same_turn"]["play_names_adjacent_pin"] and c["next_turn"]["turn"] == 3
+    text = analyze.format_session(s)
+    assert "same turn (turn 2)" in text and "next turn (turn 3)" in text and text.isascii()

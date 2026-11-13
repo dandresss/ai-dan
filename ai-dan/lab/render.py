@@ -613,7 +613,7 @@ def draw_banners(surf, lay: Layout, snap: Snapshot | None, view: View) -> None:
                      + (view.nokey_detail or "no Anthropic API key was found."), TEXT),
                  (font("sans", int(13 * u)), "To wake it, copy .env.example to .env, add your key "
                   "after ANTHROPIC_API_KEY= and start again. Without a key:", TEXT_DIM),
-                 (mono, "python -m lab --dry-run   |   python -m lab --replay FILE", TEXT_DIM)]
+                 (mono, "uv run python main.py --dry-run   |   uv run python main.py --replay FILE", TEXT_DIM)]
         top = _lines_box(surf, lay, lines, cx, top, accent=(52, 52, 60),
                          max_w=int(min(lay.room.width - 40, 760 * u))).bottom + int(10 * u)
 
@@ -635,8 +635,8 @@ def draw_banners(surf, lay: Layout, snap: Snapshot | None, view: View) -> None:
                   + " The body stays as it was left.", TEXT)]
         if view.log_path:
             lines += [(mono, f"log      {view.log_path}", TEXT_DIM),
-                      (mono, f"analyse  python -m lab.analyze {view.log_path}", TEXT_DIM),
-                      (mono, f"replay   python -m lab --replay {view.log_path}", TEXT_DIM)]
+                      (mono, f"analyse  uv run python -m lab.analyze {view.log_path}", TEXT_DIM),
+                      (mono, f"replay   uv run python main.py --replay {view.log_path}", TEXT_DIM)]
         _lines_box(surf, lay, lines, cx, lay.grid.bottom + int(lay.pitch * 0.55),
                    max_w=int(min(lay.room.width - 40, 760 * u)))
 

@@ -1,6 +1,6 @@
 r"""Success criterion of the experiment, computed from session logs.
 
-    .venv\Scripts\python.exe -m lab.analyze [FILES or DIRECTORIES ...] [--json]
+    uv run python -m lab.analyze [FILES or DIRECTORIES ...] [--json]
 
 No manual step and no judgement: the main criterion and the easy secondary
 observations are computed; the two that need reading ("notices the touch",
@@ -209,22 +209,30 @@ def secondary(events, rows, cols):
         prev = pin
         if pin is None or was is not None:  # only the start of each touch
             continue
-        wake = next((w for w in events[i + 1:] if w.get("type") == "wake"), None)
-        if wake is None:
-            out["touch_candidates"].append({"line": ev["_line"], "pin": pin, "turn": None})
-            continue
-        turn = wake["turn"]
-        named = set()
-        for call in plays:
-            if call.get("turn") == turn:
+        def turn_view(turn, after_line):
+            named = set()
+            mine = [c for c in plays if c.get("turn") == turn and c["_line"] > after_line]
+            for call in mine:
                 for t in (call.get("args") or {}).get("tracks") or []:
                     if isinstance(t, dict):
                         named |= pins_of(t.get("pins"), rows, cols)
+            return {"turn": turn, "play_lines": [c["_line"] for c in mine],
+                    "play_names_adjacent_pin": any(adjacent(tuple(pin), p) for p in named),
+                    "thought_lines": [th["_line"] for th in thoughts
+                                      if th.get("turn") == turn and th["_line"] > after_line]}
+
+        # The turn already running when the press began: a wake with no turn_end yet.
+        open_turn = None
+        for w in events[:i]:
+            if w.get("type") == "wake":
+                open_turn = w["turn"]
+            elif w.get("type") == "turn_end" and w.get("turn") == open_turn:
+                open_turn = None
+        wake = next((w for w in events[i + 1:] if w.get("type") == "wake"), None)
         out["touch_candidates"].append({
-            "line": ev["_line"], "pin": pin, "turn": turn,
-            "play_lines": [c["_line"] for c in plays if c.get("turn") == turn],
-            "play_names_adjacent_pin": any(adjacent(tuple(pin), p) for p in named),
-            "thought_lines": [th["_line"] for th in thoughts if th.get("turn") == turn]})
+            "line": ev["_line"], "pin": pin,
+            "same_turn": turn_view(open_turn, ev["_line"]) if open_turn is not None else None,
+            "next_turn": turn_view(wake["turn"], ev["_line"]) if wake else None})
     return out
 
 
@@ -363,12 +371,14 @@ def format_session(s):
     touches = sec["touch_candidates"]
     out.append(f"     notices the touch: {len(touches)} touch(es) in the log")
     for c in touches:
-        if c["turn"] is None:
-            out.append(f"       press at line {c['line']} on pin {c['pin']}: no later wake")
-            continue
-        out.append(f"       press at line {c['line']} on pin {c['pin']} -> turn {c['turn']}: "
-                   f"play at lines {c['play_lines'] or 'none'}, names adjacent pin: {yn(c['play_names_adjacent_pin'])}, "
-                   f"thoughts at lines {c['thought_lines'] or 'none'}")
+        out.append(f"       press at line {c['line']} on pin {c['pin']}:")
+        for label, v in (("same turn", c["same_turn"]), ("next turn", c["next_turn"])):
+            if v is None:
+                out.append(f"         {label}: none")
+            else:
+                out.append(f"         {label} (turn {v['turn']}): play at lines {v['play_lines'] or 'none'}, "
+                           f"names adjacent pin: {yn(v['play_names_adjacent_pin'])}, "
+                           f"thoughts at lines {v['thought_lines'] or 'none'}")
     return "\n".join(out)
 
 

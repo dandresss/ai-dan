@@ -15,7 +15,8 @@ not order.
 ```
 ai-dan/
   ARCHITECTURE.md      lead
-  requirements.txt     lead
+  pyproject.toml       lead     dependencies; `uv run` reads it
+  main.py              lead     entry point: `uv run python main.py`
   lab/
     config.py          lead     every parameter from every spec
     body.py            lead     Body protocol, Snapshot, ThreadedBody
@@ -41,8 +42,9 @@ Rules for the team:
 
 - Edit only the files you own. If a lead file blocks you, work around it and
   say so in your report; do not change it.
-- Python 3.14 in `.venv`. Run everything as `.venv\Scripts\python.exe ...`
-  from `C:\Users\dandr\ai-dan\ai-dan`. Tests: `.venv\Scripts\python.exe -m pytest tests -q`.
+- Run everything through uv from this folder: `uv run python main.py`,
+  `uv run pytest`. uv keeps the environment in `.venv` and the exact versions
+  in `uv.lock`.
 - Dependencies are `anthropic`, `pygame-ce` (imported as `pygame`),
   `python-dotenv`, `pytest`. Nothing else, and no numpy: 64 pins do not need it.
 - Plain, readable code. Short modules. Comments only where the reason is not

@@ -1,0 +1,21 @@
+[project]
+name = "a-body-to-wake-up-in"
+version = "0.1.0"
+description = "The virtual lab: a simulated 8x8 body of pins for an AI to wake up in."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=2.8",
+    "pygame-ce>=2.5.8",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
