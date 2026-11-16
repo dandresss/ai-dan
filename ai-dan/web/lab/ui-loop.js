@@ -63,6 +63,8 @@ export class Pointer {
     this.button = false;
     this.arrived = false;
     this.touch = false;       // the last pointer was a finger
+    this.hold = null;         // the press: [[row, column], height when it began] (Layout.touch), or null
+    this.holdAt = null;       // where the pointer was when the press was last chosen
     this._finger = false;
   }
 
@@ -81,11 +83,15 @@ export class Pointer {
     this._finger = this.touch;
     this.pos = [x, y];
     this.button = true;
+    this.hold = null;         // a new press, even if the last one's release was lost
+    this.holdAt = null;
     this.arrived = true;
   }
 
   up(type) {
     this.button = false;
+    this.hold = null;
+    this.holdAt = null;
     if (type === "touch" && this._finger) {
       this._finger = false;
       this.pos = null;
@@ -96,6 +102,8 @@ export class Pointer {
   leave() {
     this.pos = null;
     this.button = false;
+    this.hold = null;
+    this.holdAt = null;
     this._finger = false;
   }
 
@@ -104,23 +112,42 @@ export class Pointer {
     return this.pos ? lay.toPinUnits(this.pos) : null;
   }
 
-  /** The pin under a held button or finger, or null. */
+  /**
+   * The pin a held button or finger presses, or null. Call it once per tick.
+   * Only the person moves a press: it is chosen again when the pointer moves,
+   * never because the body moved under it, and in the 3D view it stays on its
+   * pin while the pin sinks under it (Layout.touch).
+   */
   pressed(lay, rows = 8, cols = 8) {
-    return this.pos && this.button ? lay.pinAt(this.pos, rows, cols) : null;
+    if (!this.pos || !this.button) {
+      this.hold = null;
+      this.holdAt = null;
+      return null;
+    }
+    if (!this.holdAt || this.holdAt[0] !== this.pos[0] || this.holdAt[1] !== this.pos[1]) {
+      this.hold = lay.touch(this.pos, this.hold, rows, cols);
+      this.holdAt = this.pos;
+    }
+    return this.hold ? this.hold[0] : null;
   }
 }
 
 /**
- * What a key does in the room: "panel", "help", "clean", "close-help",
- * "pause", "type" (move to the typing line), or null (the browser's own).
+ * What a key does in the room: "panel", "help", "clean", "view3d",
+ * "close-help", "pause", "type" (move to the typing line), or null (the
+ * browser's own).
  * Letters are never shortcuts: typing is the person's voice. Tab opens the
  * observer, as on the desktop, unless a button has focus: then Tab and
  * Shift+Tab move between the buttons, and Shift+Tab is how the keyboard
  * reaches them.
+ * On the start screen (`start`) every key is the card's, except F3: the
+ * 3D view already works there, on the body behind the card.
  */
 export function keyAction({ key, shift = false, ctrl = false, alt = false, meta = false,
-  onControl = false, replay = false, typing = false, helpOpen = false }) {
+  onControl = false, replay = false, typing = false, helpOpen = false, start = false }) {
   const plain = !ctrl && !alt && !meta;
+  if (key === "F3") return "view3d";
+  if (start) return null;
   if (key === "F1") return "help";
   if (key === "F2") return "clean";
   if (key === "Escape") return helpOpen ? "close-help" : null;

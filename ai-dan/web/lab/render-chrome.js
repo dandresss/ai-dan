@@ -337,6 +337,7 @@ function helpRows(view) {
       ["lift", "lifting it is leaving"],
       view.mode === "replay" ? ["Pause", "pause or resume the replay"] : ["speak", "tap the line under the body, type, then send"],
       ["Observer", "the mind's private side"],
+      ["3D view", "see how high each pin stands"],
     ];
   }
   const rows = [
@@ -346,6 +347,7 @@ function helpRows(view) {
     ["Shift+Tab", "to the buttons below; Tab moves between them"],
     ["F1", "this help"],
     ["F2", "hide all text, for clean recordings"],
+    ["F3", "3D view: see how high each pin stands; F3 again for the top view"],
     ["F11", "fullscreen"],
     ["Esc", "close this help"],
   ];

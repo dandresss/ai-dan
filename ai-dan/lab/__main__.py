@@ -19,7 +19,7 @@ def _parse(argv):
     ap = argparse.ArgumentParser(prog="uv run main.py", description="A body to wake up in: the virtual lab. "
                                  "With no options it opens the lab in a web page at http://localhost:8080.",
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
-                                 epilog="desktop keys: Tab observer panel, F1 help, F2 hide text, F11 fullscreen, Esc quit")
+                                 epilog="desktop keys: Tab observer panel, F1 help, F2 hide text, F3 3D view, F11 fullscreen, Esc quit")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--desktop", action="store_true", help="a live session in the desktop room instead of the web page")
     mode.add_argument("--dry-run", action="store_true",

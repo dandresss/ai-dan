@@ -6,9 +6,14 @@
 // colour, and from nothing else: no clocks, no noise, no light from the person.
 // If the body looks like it is breathing, the mind made it breathe.
 //
+// The room has two views of the same body: the top view, and a fixed 3D view
+// (F3) to see how high each pin stands. The camera (camera.js) never moves,
+// and the rule holds in both.
+//
 // The pure parts (layout, mindStatus, the observer's reading of the feed) run
 // in Node for the tests; nothing touches the DOM at import time.
 
+import { Camera, height } from "./camera.js";
 import {
   BLACK, DORMANT, GHOST, PERSON, PLATE, PLATE_EDGE, ROOM_CENTER, ROOM_EDGE, WHITE,
   canvasMeasure, css, dot, mix, ring, roundRect,
@@ -32,6 +37,7 @@ export function makeView(over = {}) {
     panel: false,            // Tab
     help: false,             // F1
     clean: false,            // F2: no chrome
+    view3d: false,           // F3: the fixed 3D view
     intro: 1.0,              // opacity of the title overlay
     said: "",
     saidAlpha: 0.0,
@@ -69,31 +75,60 @@ function rect(x, y, w, h) {
 
 export class Layout {
   constructor(fields) {
+    this.camera = null;       // the 3D view's Camera; null in the top view
+    this.heights = null;      // the real heights, [row][col], the frame was drawn with (draw sets them)
     Object.assign(this, fields);
   }
 
-  /** CSS px -> [row, column] in pin units, past 0..8 in the margin. */
+  /** CSS px -> [row, column] in pin units, past 0..8 in the margin. In the
+   * 3D view, the point of the floor under them, whatever the pins do. */
   toPinUnits(px) {
+    if (this.camera) return this.camera.floor(px);
     return [(px[1] - this.grid.y) / this.pitch, (px[0] - this.grid.x) / this.pitch];
   }
 
+  /** [row, column] in pin units -> CSS px; in the 3D view, on the floor. */
   toPixels(pos) {
+    if (this.camera) return this.camera.project(pos[1], pos[0], 0);
     return [this.grid.x + pos[1] * this.pitch, this.grid.y + pos[0] * this.pitch];
   }
 
-  pinAt(px, rows = 8, cols = 8) {
+  /** The pin under a point, or null. In the 3D view, the pin drawn there,
+   * and `hold` ([[row, column], height], see touch) keeps a press on its pin. */
+  pinAt(px, rows = 8, cols = 8, hold = null) {
+    if (this.camera) return this.camera.pick(px, this.heights ?? [], hold);
     const [r, c] = this.toPinUnits(px);
     if (r >= 0 && r < rows && c >= 0 && c < cols) return [Math.trunc(r), Math.trunc(c)];
     return null;
+  }
+
+  /** A pin's real height in the frame drawn, 0 before the first. */
+  heightOf(pin) {
+    return height(this.heights, pin[0], pin[1]);
+  }
+
+  /**
+   * What a held button presses now: null, or [[row, column], height], the
+   * pin and its height when the press began. Pass the last answer as `hold`:
+   * in the 3D view the press stays on its pin while the pointer stays inside
+   * the outline the pin had then. In the top view it is the pin under px.
+   */
+  touch(px, hold = null, rows = 8, cols = 8) {
+    const pin = this.pinAt(px, rows, cols, hold);
+    if (pin === null) return null;
+    if (hold !== null && hold[0][0] === pin[0] && hold[0][1] === pin[1]) return hold;
+    return [pin, this.heightOf(pin)];
   }
 }
 
 /**
  * render.layout. On a wide window it is the desktop's, to the pixel. On a
  * narrow portrait screen (a phone) the panel goes below the room instead of
- * beside it, and the grid takes more of the width.
+ * beside it, and the grid takes more of the width. The 3D view keeps all of
+ * it, so the chrome stays in place, and adds a camera that shows the body as
+ * tall as the top view's plate, centred where the plate is.
  */
-export function layout(size, panel, rows = 8, cols = 8) {
+export function layout(size, panel, rows = 8, cols = 8, view3d = false) {
   const w = Math.max(Math.floor(size.width), 200);
   const h = Math.max(Math.floor(size.height), 160);
   const u = Math.max(0.75, Math.min(w / 1100, h / 760, 1.8));
@@ -120,8 +155,9 @@ export function layout(size, panel, rows = 8, cols = 8) {
   const gh = intOf(pitch * rows);
   const centerY = compact ? intOf(room.h * 0.45) : intOf(h * 0.48);
   const grid = rect(room.cx - Math.floor(gw / 2), centerY - Math.floor(gh / 2), gw, gh);
+  const camera = view3d ? new Camera(rows, cols, [grid.cx, grid.cy], grid.h + intOf(pitch * 0.7), room.w - pitch) : null;
   return new Layout({ width: w, height: h, room, grid, pitch, panel: panelRect, panelSide, u,
-    dpr: size.dpr || 1, compact });
+    dpr: size.dpr || 1, compact, camera });
 }
 
 // --- the room ------------------------------------------------------------
@@ -157,10 +193,9 @@ function drawRoom(ctx, lay) {
 }
 
 // --- the body ------------------------------------------------------------
-function height(snap, r, c) {
-  const v = Number(snap.actual?.[r]?.[c]);
-  if (Number.isNaN(v)) return 0.0;
-  return Math.min(1.0, Math.max(0.0, v));
+/** The body's colour, as whole channels in 0..255. */
+function tintOf(snap) {
+  return [0, 1, 2].map((i) => intOf(Math.min(255, Math.max(0, Number(snap.color?.[i]) || 0))));
 }
 
 /** Brightness grows with real height; at 0 the pin is dark but present. */
@@ -177,6 +212,13 @@ function roundEven(x) {
   const d = x - f;
   if (d !== 0.5) return Math.round(x);
   return f % 2 === 0 ? f : f + 1;
+}
+
+/** The light a pin at height h spills onto the plate, or null for none. */
+function glowColor(h, tint) {
+  if (h <= 0.02) return null;
+  const level = roundEven(h ** 1.5 * 20) / 20;
+  return level > 0 ? tint.map((v) => intOf(v * 0.30 * level)) : null;
 }
 
 const glowCaches = new WeakMap();   // per context: a gradient belongs to the canvas that made it
@@ -202,10 +244,14 @@ function glowGradient(ctx, diameter, rgb) {
 }
 
 export function drawBody(ctx, snap, lay) {
+  if (lay.camera) {
+    drawBody3d(ctx, snap, lay);
+    return;
+  }
   const p = lay.pitch;
   const { rows, cols } = snap;
   const snapPx = (v) => Math.round(v * lay.dpr) / lay.dpr;
-  const tint = [0, 1, 2].map((i) => intOf(Math.min(255, Math.max(0, Number(snap.color?.[i]) || 0))));
+  const tint = tintOf(snap);
 
   const grow = intOf(p * 0.7);
   const plateX = lay.grid.x - Math.floor(grow / 2);
@@ -222,7 +268,7 @@ export function drawBody(ctx, snap, lay) {
   const heights = [];
   for (let r = 0; r < rows; r++) {
     heights.push([]);
-    for (let c = 0; c < cols; c++) heights[r].push(height(snap, r, c));
+    for (let c = 0; c < cols; c++) heights[r].push(height(snap.actual, r, c));
   }
   const center = (r, c) => [lay.grid.x + (c + 0.5) * p, lay.grid.y + (r + 0.5) * p];
   const square = (r, c, h) => {
@@ -250,11 +296,8 @@ export function drawBody(ctx, snap, lay) {
   ctx.globalCompositeOperation = "lighter";
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const h = heights[r][c];
-      if (h <= 0.02) continue;
-      const level = roundEven(h ** 1.5 * 20) / 20;
-      if (level <= 0) continue;
-      const rgb = tint.map((v) => intOf(v * 0.30 * level));
+      const rgb = glowColor(heights[r][c], tint);
+      if (!rgb) continue;
       const [cx, cy] = center(r, c);
       ctx.setTransform(lay.dpr, 0, 0, lay.dpr, cx * lay.dpr, cy * lay.dpr);
       ctx.fillStyle = glowGradient(ctx, gd, rgb);
@@ -280,9 +323,88 @@ export function drawBody(ctx, snap, lay) {
   }
 }
 
+// --- the body in the 3D view ---------------------------------------------
+// Each face of a pin takes its top-view colour, shaded by a fixed light from
+// the upper left. No shadows. The camera's drawing order puts nearer faces
+// over farther ones, so which pin hides which follows from the heights alone.
+const SHADE = { top: 0, front: 0.42, left: 0.30, right: 0.55 };
+
+function drawBody3d(ctx, snap, lay) {
+  const cam = lay.camera;
+  const tint = tintOf(snap);
+  const heightAt = (r, c) => height(snap.actual, r, c);
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.lineJoin = "round";   // a face seen almost edge-on is a sliver, and a mitred corner would be a spike
+  drawPlate3d(ctx, cam);
+  drawGlow3d(ctx, lay, heightAt, tint);
+  for (const [r, c] of cam.order()) drawPin3d(ctx, cam, r, c, heightAt(r, c), tint);
+  ctx.restore();
+}
+
+function quadPath(ctx, quad) {
+  ctx.beginPath();
+  ctx.moveTo(quad[0][0], quad[0][1]);
+  for (let i = 1; i < quad.length; i++) ctx.lineTo(quad[i][0], quad[i][1]);
+  ctx.closePath();
+}
+
+function drawPlate3d(ctx, cam) {
+  const [top, front] = cam.plate();
+  quadPath(ctx, top);
+  ctx.fillStyle = css(PLATE);
+  ctx.fill();
+  ctx.strokeStyle = css(PLATE_EDGE);
+  ctx.stroke();
+  quadPath(ctx, front);
+  ctx.fillStyle = css(mix(PLATE, BLACK, 0.45));
+  ctx.fill();
+}
+
+// The top view's glow, lying on the plate: its disc is stretched to the
+// width and depth on screen of the 2.4 x 2.4 square around the pin, measured
+// through the pin's centre.
+function drawGlow3d(ctx, lay, heightAt, tint) {
+  const cam = lay.camera;
+  const gd = Math.max(4, intOf(lay.pitch * 2.4));
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let r = 0; r < cam.rows; r++) {
+    for (let c = 0; c < cam.cols; c++) {
+      const rgb = glowColor(heightAt(r, c), tint);
+      if (!rgb) continue;
+      const [x, y] = [c + 0.5, r + 0.5];
+      const [cx, cy] = cam.project(x, y, 0);
+      const w = cam.project(x + 1.2, y, 0)[0] - cam.project(x - 1.2, y, 0)[0];
+      const h = cam.project(x, y + 1.2, 0)[1] - cam.project(x, y - 1.2, 0)[1];
+      ctx.setTransform(lay.dpr * w / gd, 0, 0, lay.dpr * h / gd, cx * lay.dpr, cy * lay.dpr);
+      ctx.fillStyle = glowGradient(ctx, gd, rgb);
+      ctx.fillRect(-gd / 2, -gd / 2, gd, gd);
+    }
+  }
+  ctx.restore();
+}
+
+function drawPin3d(ctx, cam, r, c, h, tint) {
+  const face = pinFace(h, tint);
+  for (const [kind, quad] of cam.faces(r, c, h)) {
+    const fill = css(mix(face, BLACK, SHADE[kind]));
+    quadPath(ctx, quad);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    // A line in the face's own colour covers the hairline seams between a
+    // pin's faces. The top's is the top view's lit edge.
+    ctx.strokeStyle = kind === "top" ? css(mix(face, WHITE, 0.05 + 0.2 * h)) : fill;
+    ctx.stroke();
+  }
+}
+
 /** The person: a warm light at the pointer (live), or the recorded visitor
  * as a ring (replay). It lights the room, never the pins. */
 export function drawPerson(ctx, lay, px, pressing, ghost = false) {
+  // As on the desktop: a recorded visitor far beyond the 3D view's camera
+  // lands absurdly far off the screen, and there is nothing to draw.
+  if (!px.every((v) => Number.isFinite(v) && Math.abs(v) < 1e6)) return;
   const p = lay.pitch;
   const x = intOf(px[0]) + 0.5;
   const y = intOf(px[1]) + 0.5;
@@ -312,7 +434,8 @@ const measures = new WeakMap();
 
 /**
  * Draw one frame on a canvas whose backing store is size.width x size.height
- * CSS px at size.dpr. Returns the layout, so input can map pixels to pins;
+ * CSS px at size.dpr. Returns the layout, so input can map pixels to pins
+ * as drawn (`layout.heights` are the heights this frame shows);
  * `layout.panelInfo` says how far the observer panel can scroll.
  */
 export function draw(ctx, snap, view, size) {
@@ -323,7 +446,8 @@ export function draw(ctx, snap, view, size) {
   }
   const rows = snap ? snap.rows : 8;
   const cols = snap ? snap.cols : 8;
-  const lay = layout(size, (view.panel && !view.clean) || view.aside, rows, cols);
+  const lay = layout(size, (view.panel && !view.clean) || view.aside, rows, cols, view.view3d);
+  lay.heights = snap ? snap.actual : null;
   ctx.setTransform(lay.dpr, 0, 0, lay.dpr, 0, 0);
   ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = 1;

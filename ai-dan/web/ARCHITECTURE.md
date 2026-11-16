@@ -43,6 +43,7 @@ web/                         Vercel project root ("Root Directory" = ai-dan/web)
     model.js        mind     AnthropicModel (through the host's /api/mind), ScriptedModel
     harness.js      mind     port of lab/harness.py, async
     render.js       ui       port of lab/render.py to a 2D canvas: layout, room, pins, person
+    camera.js       lead     port of lab/camera.py: the fixed 3D view's arithmetic
     render-base.js  ui       palette, fonts, wrapping, Python number formats
     render-chrome.js ui      intro, status line, banners, help
     render-panel.js ui       the observer: reading the feed, call summaries, the panel
@@ -250,6 +251,19 @@ the visitor opens or drops on the page), `live` (a mind on the host's key,
 with the access code if the host asks for one), `dryrun` (the wiring test, labelled "not an
 AI" wherever the desktop labels it). A live or dry-run session can be
 downloaded as its JSONL log at any time and when it ends.
+
+The 3D view is the desktop's too (`../ARCHITECTURE.md`, "The 3D view"): F3 or
+the "3D view" button switch to it, and the page keeps the choice for every
+view it opens until the visit ends. The start screen has it too, for the
+replay behind the card. When the card stands beside the body, the button
+stands alone where it will be in the room (`.controls.on-start`, above the
+card's layer). When the card covers the body, F3 works there but the button
+does not show: there is nothing to see turn. `keyAction({ start: true })`
+leaves every other key to the card. `lab/camera.js` is a line-for-line port of
+`lab/camera.py`, checked against `tests/fixtures/camera.json`, which
+`tests/fixtures/make_camera_fixtures.py` writes from the Python. So a pointer
+at the same pixel of the same window stands at the same floor point and
+presses the same pin on both.
 
 The loop is the desktop's: fixed 20 ms simulation steps kept in line with
 the wall clock by `requestAnimationFrame`, at most 10 steps per frame, a

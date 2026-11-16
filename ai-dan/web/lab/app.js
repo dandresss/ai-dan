@@ -31,7 +31,8 @@ const showText = $("show-text");
 const buttons = Object.fromEntries([...controls.querySelectorAll("button")].map((b) => [b.dataset.act, b]));
 
 let lastTouch = matchMedia("(hover: none) and (pointer: coarse)").matches;   // the visitor's last pointer was a finger
-const startView = makeView({ mode: "replay", clean: true, intro: 0 });
+let view3d = false;                // the view last chosen (F3): every new view starts in it; nothing is stored
+const startView = makeView({ mode: "replay", clean: true, intro: 0, view3d });
 const RESTING = restingSnapshot();
 let session = null;                // what the room shows: the replay behind the start card, or a session
 let size = { width: 0, height: 0, dpr: 1 };
@@ -118,7 +119,7 @@ async function openReplay(events, name, { speed = 1, panel = null } = {}) {
   } catch (err) {
     throw notALog(err);
   }
-  const view = makeView({ mode: "replay", intro: 0, replayName: name, speed, touch: touchNow(),
+  const view = makeView({ mode: "replay", intro: 0, replayName: name, speed, touch: touchNow(), view3d,
     panel: panel ?? window.innerWidth >= PANEL_OPEN_WIDTH });
   enter(new Session({ kind: "replay", world, view, events, name }));
 }
@@ -160,14 +161,15 @@ async function openLive({ dryrun = false, accessCode = undefined, memory = false
       model: null, tools: [], memory_enabled: config.MEMORY_ENABLED, mind: "none" });
   }
   const kind = dryrun ? "dryrun" : "live";
-  const view = makeView({ mode: harness ? kind : "nokey", nokeyDetail: detail, logName: log.fileName(), touch: touchNow() });
+  const view = makeView({ mode: harness ? kind : "nokey", nokeyDetail: detail, logName: log.fileName(), touch: touchNow(),
+    view3d });
   enter(new Session({ kind, world, log, harness, view }));
 }
 
 // The replay behind the start card: the first waking, again and again.
 function preview(events, ReplayWorld) {
   const s = new Session({ kind: "replay", world: new ReplayWorld(events), events, name: "first-wake.jsonl",
-    view: makeView({ mode: "replay", clean: true, intro: 0 }) });
+    view: makeView({ mode: "replay", clean: true, intro: 0, view3d }) });
   s.preview = true;
   return s;
 }
@@ -185,6 +187,7 @@ async function startPreview() {
 
 function showStart() {
   session = null;
+  startView.view3d = view3d;
   document.title = TITLE;
   start.show();
   startPreview();
@@ -242,7 +245,19 @@ function toggleFullscreen() {
   done?.catch((err) => report(err, "Fullscreen"));
 }
 
+// The start screen already has the 3D view (its button and F3): it turns the
+// body behind the card, and whatever opens next starts in that view.
+function turnStartView() {
+  view3d = !view3d;
+  startView.view3d = view3d;
+  if (session?.preview) session.view.view3d = view3d;
+}
+
 function act(name) {
+  if (start.visible) {
+    if (name === "view3d") turnStartView();
+    return;
+  }
   const s = session;
   if (!s || s.preview) return;
   const v = s.view;
@@ -250,6 +265,7 @@ function act(name) {
     case "panel": v.panel = !v.panel; break;
     case "help": v.help = !v.help; break;
     case "clean": v.clean = !v.clean; break;
+    case "view3d": v.view3d = !v.view3d; view3d = v.view3d; break;
     case "fullscreen": toggleFullscreen(); break;
     case "pause": v.paused = !v.paused; break;
     case "speed": v.speed = SPEEDS[(SPEEDS.indexOf(v.speed) + 1) % SPEEDS.length]; break;
@@ -335,6 +351,13 @@ const isControl = (el) => el instanceof HTMLButtonElement
   && (controls.contains(el) || el === showText || errorsBox.contains(el));
 
 window.addEventListener("keydown", (e) => {
+  if (start.visible) {              // the card keeps its keys; F3 turns the body behind it
+    if (keyAction({ key: e.key, start: true }) === "view3d") {
+      e.preventDefault();
+      if (!e.repeat) act("view3d");
+    }
+    return;
+  }
   if (!inRoom()) return;
   const focus = document.activeElement;
   const action = keyAction({ key: e.key, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey,
@@ -346,6 +369,7 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   e.preventDefault();
+  if (action === "view3d" && e.repeat) return;   // F3 held down: the view switches once
   if (action === "close-help") session.view.help = false;
   else act(action);
 }, true);
@@ -505,13 +529,28 @@ function setText(el, text) {
   if (el.textContent !== text) el.textContent = text;
 }
 
+const uiSize = (lay) => `${Math.max(12, Math.trunc(13 * lay.u))}px`;
+
+// Wide: the buttons stand where the desktop writes its key hints, at the right
+// of the status line.
+function onStatusLine(lay, view) {
+  const u = lay.u;
+  const middle = statusY(lay, view) + font("sans", 14 * u).lineH / 2;
+  place(controls, { left: "auto", right: `${size.width - lay.room.right + Math.trunc(22 * u)}px`,
+    top: `${Math.round(middle - controls.offsetHeight / 2)}px`, bottom: "auto", "justify-content": "flex-end" });
+}
+
 function syncPage(lay) {
   const aside = start.visible && lay.panel !== null;
   start.el.classList.toggle("aside", aside);
   if (aside) place(start.el, { "--room-w": `${lay.room.w}px` });
   const s = inRoom() ? session : null;
   const v = s?.view;
-  setHidden(controls, !s || v.clean);
+  // The start card beside the body: of the session's buttons only "3D view"
+  // is there already, where it stands in the room. Where the card covers the
+  // body there is nothing to see turn, and F3 is enough.
+  controls.classList.toggle("on-start", aside);
+  setHidden(controls, !aside && (!s || v.clean));
   setHidden(showText, !s || !v.clean);
   const voiceOn = Boolean(s) && !s.replay && !s.halted && v.observer.status !== "ended";
   const appearing = voiceOn && voice.hidden;
@@ -519,6 +558,12 @@ function syncPage(lay) {
   if (appearing) refocus();
   document.body.classList.toggle("hide-cursor", Boolean(s) && !s.replay && !s.halted && !v.touch);
   document.body.classList.toggle("touch", touchNow());
+  if (aside) {
+    setPressed(buttons.view3d, view3d);
+    place(controls, { "--ui": uiSize(lay) });
+    onStatusLine(lay, startView);
+    return;
+  }
   if (!s) return;
 
   const u = lay.u;
@@ -532,13 +577,14 @@ function syncPage(lay) {
   setHidden(buttons.fullscreen, !document.fullscreenEnabled);
   setHidden(buttons.clean, lay.compact);
   setPressed(buttons.panel, v.panel);
+  setPressed(buttons.view3d, v.view3d);
   setPressed(buttons.help, v.help);
   setPressed(buttons.pause, v.paused);
   setPressed(buttons.fullscreen, Boolean(document.fullscreenElement));
   setText(buttons.pause, v.paused ? "Play" : "Pause");
   setText(buttons.speed, `Speed ${v.speed}×`);
 
-  place(controls, { "--ui": `${Math.max(12, Math.trunc(13 * u))}px` });
+  place(controls, { "--ui": uiSize(lay) });
   if (stackControls(s, lay)) {
     // Narrow: the buttons get their own row under the status line.
     place(controls, { left: `${lay.room.x + 12}px`, right: `${size.width - lay.room.right + 12}px`,
@@ -546,10 +592,7 @@ function syncPage(lay) {
     v.statusLift = controls.offsetHeight + 10;
     v.keysLeft = null;
   } else {
-    // Wide: where the desktop writes its key hints, at the right of the status line.
-    const middle = statusY(lay, v) + font("sans", 14 * u).lineH / 2;
-    place(controls, { left: "auto", right: `${size.width - lay.room.right + Math.trunc(22 * u)}px`,
-      top: `${Math.round(middle - controls.offsetHeight / 2)}px`, bottom: "auto", "justify-content": "flex-end" });
+    onStatusLine(lay, v);
     v.statusLift = 0;
     v.keysLeft = lay.room.right - Math.trunc(22 * u) - controls.offsetWidth;
   }

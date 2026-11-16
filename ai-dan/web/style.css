@@ -109,6 +109,9 @@ body.touch .voice input { border-bottom-color: rgba(74, 74, 84, 0.4); }
 .controls button:hover, .show-text:hover { color: var(--text); border-color: rgb(64, 64, 74); }
 .controls button[aria-pressed="true"] { color: var(--text); background: rgba(36, 40, 52, 0.85); border-color: rgb(64, 70, 88); }
 .controls button[data-act="end"] { color: rgb(200, 160, 120); }
+/* The start screen, card beside the body: only "3D view", over the card's layer. */
+.controls.on-start { z-index: 3; }
+.controls.on-start button:not([data-act="view3d"]) { display: none; }
 .show-text {
   position: fixed;
   right: 10px;

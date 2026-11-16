@@ -1,13 +1,17 @@
 // Tests for the page's pure logic: render.js (layout, clock, the observer's
-// reading of the feed, call summaries, the status line), the fixed-step loop,
-// the pointer, and the session lifecycle. Expected values for the ports come
-// from the Python lab: tests/fixtures/render_fixtures.py writes render.json.
+// reading of the feed, call summaries, the status line, the 3D view), the
+// fixed-step loop, the pointer, and the session lifecycle. Expected values for
+// the ports come from the Python lab: tests/fixtures/render_fixtures.py writes
+// render.json, and make_camera_fixtures.py writes camera.json.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { fixed, font, formatG, grouped, pyJson, splitLines, wrap } from "../lab/render-base.js";
+import { Camera } from "../lab/camera.js";
+import {
+  BLACK, PLATE, PLATE_EDGE, WHITE, css, fixed, font, formatG, grouped, mix, pyJson, splitLines, wrap,
+} from "../lab/render-base.js";
 import {
   Observer, callLine, clock, draw, drawBody, entryItems, isWiringTest, layout, makeView, mindFailing, mindStatus,
   pinFace, restingSnapshot, statusY, tokenText, typingY,
@@ -18,6 +22,7 @@ import { hostMind, hostNote, takeValue } from "../lab/ui-start.js";
 import { hostRefusal } from "../lab/render.js";
 
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/render.json", import.meta.url), "utf8"));
+const cameraCases = JSON.parse(readFileSync(new URL("./fixtures/camera.json", import.meta.url), "utf8")).cases;
 const firstWake = readFileSync(new URL("../sessions/first-wake.jsonl", import.meta.url), "utf8")
   .split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line));
 
@@ -581,8 +586,8 @@ test("every element the scripts look up exists in index.html", () => {
 // passed must be finite, so a typo or a NaN in render.js fails here.
 const CTX_METHODS = new Set(["fillRect", "beginPath", "moveTo", "lineTo", "arc", "arcTo", "closePath", "fill",
   "stroke", "fillText", "save", "restore", "setTransform", "translate", "putImageData", "drawImage", "rect", "clip"]);
-const CTX_PROPS = new Set(["fillStyle", "strokeStyle", "lineWidth", "font", "textBaseline", "textAlign", "globalAlpha",
-  "globalCompositeOperation", "imageSmoothingEnabled", "imageSmoothingQuality"]);
+const CTX_PROPS = new Set(["fillStyle", "strokeStyle", "lineWidth", "lineJoin", "font", "textBaseline", "textAlign",
+  "globalAlpha", "globalCompositeOperation", "imageSmoothingEnabled", "imageSmoothingQuality"]);
 
 function fakeCanvas() {
   const ops = [];
@@ -637,11 +642,13 @@ function snapOf({ actual = swell(1.4), color = [120, 170, 255], person = null, p
   return { ...restingSnapshot(), tick: Math.round(t * 50), t, actual, target: actual, color, person, pressed };
 }
 const STORY = fixtures.status.find((c) => c.name === "ended").events;
+const SIZES = [[1280, 800, 1], [1920, 1080, 2], [390, 844, 3], [844, 390, 2], [200, 160, 1]];
 
-test("every scene draws without an error, on a desktop and on a phone", () => {
+/** A snapshot and a view for every state the room can be in. */
+function sceneTable() {
   const near = LAY.toPixels([9.4, 5.2]);
   const err = (attempt) => ({ type: "api_error", t: 8 + attempt, turn: 1, attempt, error: "HTTP 529: Overloaded" });
-  const scenes = {
+  return {
     start: [restingSnapshot(), makeView({ mode: "replay", clean: true, intro: 0 })],
     intro: [snapOf({ actual: restingSnapshot().actual }), makeView({ observer: observe([HEADER]) })],
     introTouch: [snapOf(), makeView({ observer: observe([HEADER]), touch: true, intro: 0.5 })],
@@ -667,7 +674,11 @@ test("every scene draws without an error, on a desktop and on a phone", () => {
     helpTouch: [snapOf(), makeView({ mode: "replay", observer: observe(STORY), intro: 0, help: true, touch: true })],
     clean: [snapOf(), makeView({ mode: "dryrun", observer: observe(STORY), intro: 0, clean: true, panel: true })],
   };
-  for (const [width, height, dpr] of [[1280, 800, 1], [1920, 1080, 2], [390, 844, 3], [844, 390, 2], [200, 160, 1]]) {
+}
+
+test("every scene draws without an error, on a desktop and on a phone", () => {
+  const scenes = sceneTable();
+  for (const [width, height, dpr] of SIZES) {
     for (const [name, [snap, view]] of Object.entries(scenes)) {
       const ctx = fakeCanvas();
       const lay = draw(ctx, snap, view, { width, height, dpr });
@@ -699,4 +710,331 @@ test("the honesty rule: a pin is drawn from its height and the colour, and nothi
   // The real heights and the colour do.
   assert.notEqual(opsOf(snapOf({ actual: swell(1.9), t: 3 })), base);
   assert.notEqual(opsOf(snapOf({ actual, t: 3, color: [255, 196, 150] })), base);
+});
+
+// --- the 3D view -------------------------------------------------------------------
+const near6 = (a, b) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b));
+const middle = (quad) => [0, 1].map((i) => quad.reduce((sum, p) => sum + p[i], 0) / quad.length);
+const topOf = (cam, r, c, h) => Object.fromEntries(cam.faces(r, c, h)).top;
+const flat = () => restingSnapshot().actual;
+const layout3d = (size = { width: 1280, height: 800 }) => layout(size, false, 8, 8, true);
+
+/** The polygons a drawing filled, in order, each with its fill and the stroke drawn on the same path. */
+function polygons(ops) {
+  const out = [];
+  let path = null;
+  let fill = null;
+  let stroke = null;
+  for (const op of ops) {
+    if (op[0] === "set" && op[1] === "fillStyle") fill = op[2];
+    else if (op[0] === "set" && op[1] === "strokeStyle") stroke = op[2];
+    else if (op[0] === "beginPath") path = { points: [], fill: null, stroke: null };
+    else if (!path) continue;
+    else if (op[0] === "moveTo" || op[0] === "lineTo") path.points.push([op[1], op[2]]);
+    else if (op[0] === "fill") out.push(Object.assign(path, { fill }));
+    else if (op[0] === "stroke") path.stroke = stroke;
+  }
+  return out;
+}
+
+test("F3's layout adds the desktop's camera and keeps everything else; the top view has none", () => {
+  for (const c of cameraCases) {
+    const size = { width: c.size[0], height: c.size[1] };
+    const where = `${c.size.join("x")} panel=${c.panel} grid=${c.args[0]}x${c.args[1]}`;
+    const top = layout(size, c.panel, c.args[0], c.args[1]);
+    const lay = layout(size, c.panel, c.args[0], c.args[1], true);
+    assert.ok(lay.camera instanceof Camera, where);
+    for (const key of ["k", "ox", "oy"]) {
+      assert.ok(near6(lay.camera[key], c.camera[key]), `${key} ${where}: ${lay.camera[key]} != ${c.camera[key]}`);
+    }
+    assert.equal(top.camera, null, `top view ${where}`);
+    assert.equal(layout(size, c.panel, c.args[0], c.args[1], false).camera, null);
+    for (const key of ["room", "grid", "panel"]) assert.deepEqual(box(lay[key]), box(top[key]), `${key} ${where}`);
+    assert.deepEqual([lay.pitch, lay.u, lay.compact], [top.pitch, top.u, top.compact], where);
+  }
+  assert.equal(makeView().view3d, false, "the top view is the default");
+});
+
+test("on a phone the 3D body stays inside the room, above the typing line", () => {
+  for (const [w, h] of [[390, 844], [360, 640], [320, 568], [844, 390], [667, 375]]) {
+    for (const panel of [false, true]) {
+      const lay = layout({ width: w, height: h }, panel, 8, 8, true);
+      const [x, y, bw, bh] = lay.camera.bounds();
+      const where = `${w}x${h} panel=${panel}`;
+      assert.ok(x >= lay.room.x && x + bw <= lay.room.right, `inside the room's width ${where}`);
+      assert.ok(y >= lay.room.y && y + bh <= typingY(lay), `above the typing line ${where}`);
+    }
+  }
+});
+
+test("in the 3D view the person is the floor point under the pointer, whatever the pins do", () => {
+  const lay = layout3d();
+  for (const pos of [[0, 0], [2.5, 3.25], [7.9, 7.9], [9.4, 5.2], [-1.5, -2]]) {
+    const px = lay.toPixels(pos);
+    assert.deepEqual(px, lay.camera.project(pos[1], pos[0], 0));
+    const back = lay.toPinUnits(px);
+    assert.ok(near6(back[0], pos[0]) && near6(back[1], pos[1]), `round trip ${pos}: ${back}`);
+  }
+  const px = [700, 420];
+  const before = lay.toPinUnits(px);
+  lay.heights = swell(1.4);
+  assert.deepEqual(lay.toPinUnits(px), before, "the pins' heights cannot move the person");
+});
+
+test("in the 3D view a press goes to the pin drawn under the pointer", () => {
+  const lay = layout3d();
+  const cam = lay.camera;
+  const px = middle(topOf(cam, 6, 2, 1));
+  assert.equal(lay.heights, null, "before the first frame every pin lies flat");
+  assert.deepEqual(lay.pinAt(px), cam.pick(px, []));
+  const heights = flat();
+  heights[6][2] = 1;
+  lay.heights = heights;
+  assert.deepEqual(lay.pinAt(px), [6, 2], "the top of a raised pin");
+  assert.deepEqual(lay.pinAt(lay.toPixels([1.5, 4.95])), [1, 4], "over a gap, the cell of the floor point");
+  assert.equal(lay.pinAt(lay.toPixels([-1, 4])), null, "off the grid");
+  assert.equal(lay.heightOf([6, 2]), 1);
+  assert.equal(lay.heightOf([6, 3]), 0);
+  heights[6][3] = 1.7;
+  assert.equal(lay.heightOf([6, 3]), 1, "read as the drawing reads it");
+  assert.equal(lay.heightOf([9, 9]), 0);
+  assert.deepEqual(lay.touch(px), [[6, 2], 1], "a new press: the pin, and its height as the press begins");
+  const hold = [[6, 2], 0.8];
+  assert.equal(lay.touch(px, hold), hold, "on the same pin: the press as it began");
+  assert.equal(lay.touch(lay.toPixels([-1, 4]), hold), null, "off the body: no press");
+});
+
+test("a press in the 3D view stays on its pin while the pin sinks, and moves off it with the pointer", () => {
+  const lay = layout3d();
+  const cam = lay.camera;
+  const heights = flat();
+  heights[6][2] = 1;
+  lay.heights = heights;
+  const px = middle(topOf(cam, 6, 2, 1));
+  const p = new Pointer();
+  p.down(...px, "mouse");
+  assert.deepEqual(p.pressed(lay), [6, 2], "the top of a tall pin presses that pin");
+  assert.deepEqual(p.hold, [[6, 2], 1]);
+  const person = p.person(lay);
+  heights[6][2] = 0.2;          // the pin sinks under the press
+  assert.notDeepEqual(lay.pinAt(px), [6, 2], "a new press there would land behind it");
+  assert.deepEqual(p.pressed(lay), [6, 2], "the press stays on its pin");
+  assert.deepEqual(p.pressed(lay), [6, 2], "tick after tick");
+  assert.deepEqual(p.hold, [[6, 2], 1], "with the outline it had when the press began");
+  assert.deepEqual(p.person(lay), person, "the person stays where they were");
+  const away = middle(topOf(cam, 1, 6, 0));
+  p.move(...away, "mouse");
+  assert.deepEqual(p.pressed(lay), [1, 6], "moving off the pin moves the press");
+  p.up("mouse");
+  assert.equal(p.hold, null);
+  assert.equal(p.pressed(lay), null);
+});
+
+test("a press in the 3D view stays on its pin when a neighbour rises in front of it", () => {
+  const lay = layout3d();
+  const heights = flat();
+  heights[6][2] = 0.3;
+  lay.heights = heights;
+  const px = middle(topOf(lay.camera, 6, 2, 0.3));
+  const p = new Pointer();
+  p.down(...px, "mouse");
+  assert.deepEqual(p.pressed(lay), [6, 2]);
+  heights[7][2] = 1;            // the pin in front rises between the camera and the press
+  assert.deepEqual(lay.pinAt(px), [7, 2], "it now hides the pressed pin's top");
+  assert.deepEqual(p.pressed(lay), [6, 2], "the press stays where it began");
+  p.down(...px, "mouse");       // a new press, as if the last release never arrived
+  assert.deepEqual(p.pressed(lay), [7, 2], "a new press takes the pin drawn there now");
+  p.leave();
+  assert.equal(p.hold, null, "leaving ends the press");
+  assert.equal(p.pressed(lay), null);
+  p.down(...px, "mouse");
+  assert.deepEqual(p.pressed(lay), [7, 2], "a new press takes the pin now drawn there");
+});
+
+test("in the top view a press is the pin under the pointer, as before", () => {
+  const hold = [[3, 3], 1];
+  for (let y = -0.6; y < 9; y += 0.37) {
+    for (let x = -0.6; x < 9; x += 0.41) {
+      const px = LAY.toPixels([y, x]);
+      assert.deepEqual(LAY.touch(px, hold)?.[0] ?? null, LAY.pinAt(px), `at ${y},${x}`);
+      assert.deepEqual(LAY.pinAt(px, 8, 8, hold), LAY.pinAt(px), "hold is ignored");
+    }
+  }
+  const p = new Pointer();
+  p.down(...pinPx(3, 3), "mouse");
+  assert.deepEqual(p.pressed(LAY), [3, 3]);
+  p.move(...pinPx(3, 4), "mouse");
+  assert.deepEqual(p.pressed(LAY), [3, 4], "the press follows the pointer at once");
+});
+
+test("draw remembers the heights it drew, in the view the visitor chose", () => {
+  const snap = snapOf();
+  const size = { width: 1280, height: 800, dpr: 1 };
+  const top = draw(fakeCanvas(), snap, makeView({ intro: 0 }), size);
+  assert.equal(top.camera, null);
+  assert.equal(top.heights, snap.actual);
+  const lay = draw(fakeCanvas(), snap, makeView({ intro: 0, view3d: true }), size);
+  assert.ok(lay.camera instanceof Camera);
+  assert.equal(lay.heights, snap.actual);
+});
+
+test("the 3D body: the plate, light lying on it, then each pin's faces from back to front", () => {
+  const lay = layout({ width: 1280, height: 800, dpr: 2 }, false, 8, 8, true);
+  const cam = lay.camera;
+  const actual = flat();
+  actual[6][2] = 1;
+  actual[3][5] = 0.5;
+  const tint = [120, 170, 255];
+  const ctx = fakeCanvas();
+  drawBody(ctx, snapOf({ actual, color: tint }), lay);
+
+  const [plateTop, plateFront] = cam.plate();
+  const want = [
+    { points: plateTop, fill: css(PLATE), stroke: css(PLATE_EDGE) },
+    { points: plateFront, fill: css(mix(PLATE, BLACK, 0.45)), stroke: null },
+  ];
+  const shade = { top: 0, front: 0.42, left: 0.30, right: 0.55 };
+  for (const [r, c] of cam.order()) {
+    const h = actual[r][c];
+    const face = pinFace(h, tint);
+    for (const [kind, points] of cam.faces(r, c, h)) {
+      const fill = css(mix(face, BLACK, shade[kind]));
+      want.push({ points, fill, stroke: kind === "top" ? css(mix(face, WHITE, 0.05 + 0.2 * h)) : fill });
+    }
+  }
+  assert.deepEqual(polygons(ctx.ops), want, "every face the camera sees, in its order, and nothing else: no shadows");
+  assert.deepEqual(cam.faces(6, 2, 1).map(([kind]) => kind), ["right", "front", "top"], "the raised pin shows three faces");
+
+  // The glow: one ellipse per raised pin, on the plate, added to it.
+  const at = (name) => ctx.ops.flatMap((op, i) => (op[0] === name ? [i] : []));
+  const spots = at("fillRect");
+  assert.equal(spots.length, 2, "light from the raised pins only");
+  assert.ok(at("fill")[1] < spots[0] && spots[1] < at("fill")[2], "after the plate, before the pins");
+  assert.ok(ctx.ops.some((op) => op[0] === "set" && op[1] === "globalCompositeOperation" && op[2] === "lighter"));
+  assert.equal(at("save").length, at("restore").length);
+  const transforms = ctx.ops.filter((op) => op[0] === "setTransform");
+  [[3, 5], [6, 2]].forEach(([r, c], i) => {
+    const [, a, b, cc, d, e, f] = transforms[i];
+    const [x, y] = cam.project(c + 0.5, r + 0.5, 0);
+    assert.ok(near6(e, 2 * x) && near6(f, 2 * y), "centred on the pin's foot, at the device pixel ratio");
+    const wide = cam.project(c + 1.7, r + 0.5, 0)[0] - cam.project(c - 0.7, r + 0.5, 0)[0];
+    const deep = cam.project(c + 0.5, r + 1.7, 0)[1] - cam.project(c + 0.5, r - 0.7, 0)[1];
+    const gd = Math.max(4, Math.trunc(lay.pitch * 2.4));
+    assert.deepEqual([b, cc], [0, 0]);
+    assert.ok(near6(a * gd, 2 * wide) && near6(d * gd, 2 * deep), "as wide and as deep as the 2.4 x 2.4 square around it");
+    assert.ok(a > d, "an ellipse lying on the plate");
+  });
+});
+
+test("the honesty rule holds in the 3D view: a pin is drawn from its height and the colour, and nothing else", () => {
+  const lay = layout({ width: 1280, height: 800, dpr: 2 }, false, 8, 8, true);
+  const actual = swell(0.7);
+  const opsOf = (snap) => {
+    const ctx = fakeCanvas();
+    drawBody(ctx, snap, lay);
+    return JSON.stringify(ctx.ops);
+  };
+  const base = opsOf(snapOf({ actual, t: 3 }));
+  // Time, the person, a pressed pin, the orders, the trace and the pointer's picking change nothing.
+  assert.equal(opsOf({ ...snapOf({ actual, t: 812.4, person: [4.5, 4.5], pressed: [4, 4] }),
+    target: swell(2.5), gap_max: swell(1.1) }), base);
+  lay.heights = swell(2.5);
+  assert.equal(opsOf(snapOf({ actual, t: 3 })), base);
+  // The real heights and the colour do.
+  assert.notEqual(opsOf(snapOf({ actual: swell(1.9), t: 3 })), base);
+  assert.notEqual(opsOf(snapOf({ actual, t: 3, color: [255, 196, 150] })), base);
+});
+
+test("every scene draws in the 3D view too, at every size", () => {
+  const scenes = sceneTable();
+  for (const [width, height, dpr] of SIZES) {
+    for (const [name, [snap, view]] of Object.entries(scenes)) {
+      const ctx = fakeCanvas();
+      const lay = draw(ctx, snap, { ...view, view3d: true }, { width, height, dpr });
+      const where = `${name} at ${width}x${height}`;
+      assert.ok(lay.camera, where);
+      assert.ok(polygons(ctx.ops).filter((q) => q.points.length === 4).length >= 2 + 64, `${where}: the plate and every pin`);
+      if (view.panel && !view.clean) assert.ok(lay.panelInfo, `${where}: the panel was drawn`);
+      if (name === "dryrun" || name === "clean") {
+        assert.ok(ctx.ops.some((op) => op[0] === "fillText" && /not an AI/.test(op[1])), `${where}: labelled not an AI`);
+      }
+      if (name === "badKey" && width >= 844) {
+        assert.ok(ctx.ops.some((op) => op[0] === "fillText" && op[1] === "The host's key or the access code was not accepted."),
+          `${where}: says the key or code was refused`);
+      }
+      if (view.mode === "replay" && snap.person) {
+        const [x, y] = lay.camera.project(snap.person[1], snap.person[0], 0);
+        assert.ok(ctx.ops.some((op) => op[0] === "arc" && op[1] === Math.trunc(x) + 0.5 && op[2] === Math.trunc(y) + 0.5),
+          `${where}: the recorded visitor stands on the floor point`);
+      }
+    }
+  }
+});
+
+test("F3 switches the view wherever the focus is; the help says so", () => {
+  for (const more of [{}, { typing: true }, { onControl: true }, { replay: true }, { helpOpen: true }, { start: true },
+    { start: true, shift: true }]) {
+    assert.equal(keyAction({ key: "F3", ...more }), "view3d", JSON.stringify(more));
+  }
+  for (const key of ["F1", "F2", "Tab", "Escape", " ", "Enter", "a"]) {
+    assert.equal(keyAction({ key, start: true }), null, `on the start screen ${JSON.stringify(key)} is the card's`);
+  }
+  const helpTexts = (over) => {
+    const ctx = fakeCanvas();
+    draw(ctx, snapOf(), makeView({ intro: 0, help: true, ...over }), { width: 1280, height: 800, dpr: 1 });
+    return ctx.ops.filter((op) => op[0] === "fillText").map((op) => op[1]);
+  };
+  for (const over of [{}, { mode: "replay" }, { view3d: true }]) {
+    const keys = helpTexts(over);
+    const f3 = keys.indexOf("F3");
+    assert.ok(keys.indexOf("F2") < f3 && f3 < keys.indexOf("F11"), "F3 comes after F2");
+    assert.equal(keys[f3 + 1], "3D view: see how high each pin stands; F3 again for the top view");
+  }
+  const touch = helpTexts({ touch: true });
+  assert.equal(touch[touch.indexOf("3D view") + 1], "see how high each pin stands");
+});
+
+test("the page has a 3D view button after Observer, and every new view starts in the view last chosen", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /aria-keyshortcuts="Tab">Observer<\/button>\s*<button type="button" data-act="view3d" aria-pressed="false" aria-keyshortcuts="F3">3D view<\/button>/);
+  const app = readFileSync(new URL("../lab/app.js", import.meta.url), "utf8");
+  const views = [...app.matchAll(/makeView\(\{[^}]*\}\)/g)].map((m) => m[0]);
+  assert.ok(views.length >= 4, "the start view, the preview, a replay and a live session");
+  for (const v of views) assert.match(v, /\bview3d\b/, v);
+});
+
+test("only the person moves a press: a pin rising under a still pointer neither takes it over nor starts one", () => {
+  const lay = layout({ width: 1280, height: 800 }, false, 8, 8, true);
+  const flat = () => Array.from({ length: 8 }, () => new Array(8).fill(0));
+  const p = new Pointer();
+  lay.heights = flat();
+  const gap = lay.toPixels([5.95, 2.5]);                 // between rows 5 and 6, column 2
+  p.move(gap[0], gap[1], "mouse");
+  p.down(gap[0], gap[1], "mouse");
+  assert.deepEqual(p.pressed(lay), [5, 2]);
+  lay.heights[6][2] = 0.6;                                // the pin in front rises over the pointer
+  assert.ok(lay.camera.covers(gap, 6, 2, 0.6));
+  assert.deepEqual(p.pressed(lay), [5, 2]);              // the pointer is still: the press stays
+  p.move(gap[0] + 0.5, gap[1], "mouse");                 // a tremble, still over its own cell of the floor
+  assert.deepEqual(p.pressed(lay), [5, 2]);
+  p.up("mouse");
+
+  lay.heights = flat();
+  const behind = lay.toPixels([-0.6, 3.5]);              // just behind the back row
+  p.move(behind[0], behind[1], "mouse");
+  p.down(behind[0], behind[1], "mouse");
+  assert.equal(p.pressed(lay), null);
+  lay.heights[0][3] = 1;                                 // a pin rises under the still pointer
+  assert.ok(lay.camera.covers(behind, 0, 3, 1));
+  assert.equal(p.pressed(lay), null);                    // no touch begins by itself
+});
+
+test("a recorded visitor far beyond the 3D camera is not drawn, and nothing fails", () => {
+  for (const row of [20, 40, 1e6]) {
+    const ctx = fakeCanvas();
+    draw(ctx, snapOf({ person: [row, 4] }), makeView({ mode: "replay", intro: 0, clean: true, view3d: true }),
+      { width: 1280, height: 800, dpr: 1 });
+    const far = ctx.ops.filter((op) => op[0] === "arc" && (Math.abs(op[1]) >= 1e6 || Math.abs(op[2]) >= 1e6));
+    assert.deepEqual(far, [], `row ${row}`);
+  }
 });

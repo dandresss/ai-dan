@@ -30,6 +30,7 @@ ai-dan/
     model.py           harness  Model protocol, AnthropicModel, ScriptedModel, make_model
     harness.py         harness  the mind loop: wakes, turns, memory, limits
     render.py          ui       drawing (pure function of view state)
+    camera.py          lead     the fixed 3D view: projection, the floor under the pointer, picking
     app.py             ui       window, input, main loop
     __main__.py        ui       command line
     shot.py            ui       headless screenshots
@@ -169,6 +170,153 @@ The window knows the mind only through `world.feed`: `wake` means awake,
 
 Shutting down: `world.close()` first, then `harness.stop()`, then
 `log.close()`. Closing the world releases any call the mind is waiting on.
+
+## The 3D view (`lab/camera.py`)
+
+F3, and a "3D view" button on the page, switch the room between the top view
+and a fixed 3D view, to see at a glance how high each pin stands. The camera
+stands in front of the body, beyond the last row and centred on the columns,
+and looks down at the centre of the grid from 50° above the plate, where a
+person at the display would stand. It never moves: no orbit, no zoom. Switching
+views is instant, with no animated camera, because nothing on screen may move
+unless the body's state says so. The top view stays the default, and the
+instrument for the experiment.
+
+`lab/camera.py` is the arithmetic, with no pygame. `web/lab/camera.js` is its
+line-for-line port, checked against `web/tests/fixtures/camera.json`, which
+`web/tests/fixtures/make_camera_fixtures.py` writes from the Python.
+
+```python
+class Camera:
+    def __init__(self, rows, cols, center, height, max_width)
+        # fitted so the body (plate, and pins at full height) is `height` px tall
+        # on screen, narrower if it would be wider than max_width, centred on center
+    def project(self, x, y, z) -> (sx, sy)     # world (column, row, height units) -> px
+    def floor(self, px) -> (row, col)          # the floor point under a pixel
+    def order(self) -> [(r, c)]                # drawing order: back row first, outside in
+    def faces(self, r, c, h) -> [(kind, quad)] # faces the camera sees, in drawing order;
+                                               # kind: "left", "right", "front", "top"
+    def plate(self) -> (top_quad, front_quad)
+    def bounds(self) -> (x, y, w, h)
+    def covers(self, px, r, c, h) -> bool
+    def pick(self, px, heights, hold=None) -> (r, c) | None
+```
+
+Constants, the same in both files: `ELEVATION_DEG` 50, `DISTANCE` 2.6 grid
+sides, `RISE` 1.8 (a pin at height 1 stands 1.8 pin widths tall), `PIN` 0.78,
+`PLATE_MARGIN` 0.35, `PLATE_DEPTH` 0.22, `FAR` 4.
+
+### Layout
+
+`layout(size, panel, rows=8, cols=8, view3d=False)` (page:
+`layout(size, panel, rows = 8, cols = 8, view3d = false)`) computes everything
+as before (room, grid, pitch, panel, u: the chrome is placed from them in both
+views) and adds `camera`, None in the top view:
+
+```python
+camera = Camera(rows, cols, grid.center, grid.height + int(pitch * 0.7), room.width - pitch)
+# page, compact layout included:
+# new Camera(rows, cols, [grid.cx, grid.cy], grid.h + intOf(pitch * 0.7), room.w - pitch)
+```
+
+So the 3D body is as tall on screen as the top view's plate, and centred where
+the plate is. `Layout` also gains `heights`: the real heights, `[row][col]`,
+the frame was drawn with. `draw()` sets it; it is None before the first frame.
+The methods dispatch on the camera:
+
+| Method (page: camelCase) | Top view | 3D view |
+|---|---|---|
+| `to_pin_units(px)` | as before | `camera.floor(px)` |
+| `to_pixels(pos)` | as before | `camera.project(pos[1], pos[0], 0)` |
+| `pin_at(px, rows, cols, hold=None)` | as before; `hold` ignored | `camera.pick(px, heights or [], hold)` |
+| `height_of(pin)` (new) | the module's `height(heights, r, c)` | the same |
+| `touch(px, hold=None, rows, cols)` (new) | below | below |
+
+`touch` is what a held button presses now: `pin = pin_at(px, rows, cols,
+hold)`; None if there is no pin; `hold` itself if it is on the same pin;
+otherwise `(pin, height_of(pin))`. In the top view it names the same pin as
+`pin_at`, so nothing changes there.
+
+### The person and a press
+
+- **The person** is the floor point under the pointer (`to_pin_units`). It
+  never depends on the pins' heights, so the body's own motion can never move
+  the person the mind senses.
+- **A press** goes to the pin drawn under the pointer: the nearest pin whose
+  outline contains it, or, over a gap, the cell of the floor point, as in the
+  top view.
+- **Only the person moves a press.** The press is chosen when the button goes
+  down and again only when the pointer moves. While the pointer is still, the
+  press stays as it is, whatever the body does, so the body's own motion can
+  never start, move or end a touch. When the pointer moves, the press stays on
+  its pin while the pointer is inside the pin's outline as it stood when the
+  press began, or over that pin's own cell of the floor (`Camera.pick` with
+  `hold`). So a tremble of the hand does not hand the press to a pin that
+  sank or rose meanwhile; moving off the pin does.
+- The desktop `App` keeps `self.hold`, None or `((row, col), height)`, and
+  `self.hold_at`, the mouse position it was chosen at. Each tick, `_pressed()`
+  calls `self.layout.touch(self.mouse, self.hold)` only if the mouse is not
+  where it was, and returns the held pin; both reset when the button is up and
+  when it goes down. The page's `Pointer` does the same in `pressed(lay, rows,
+  cols)` with `hold` and `holdAt`, reset on `down`, `up` and `leave`. Both are
+  called once per tick.
+- F3 held down repeats; the view switches once per press of the key.
+- Known consequences:
+  - While a tall pin's top is pressed, the person's floor point lies behind
+    that pin, by about two rows when it is fully raised (2.07 at most). For the
+    back row it lies behind the body, at a row below 0. In the top view the two
+    always agree.
+  - The outline a press keeps includes the parts nearer pins hide, so dragging
+    off a pin moves the press a little later than the picture suggests.
+  - The log does not say which view was used. Sessions for the experiment use
+    the top view.
+  - A recorded visitor far in front of the body (about 36 rows on an 8×8 grid)
+    lands beyond the camera, far off the screen, and is not drawn.
+
+### Drawing
+
+When `lay.camera` is set, `draw_body` (page: `drawBody`) draws the 3D body.
+The honesty rule holds word for word: every visual property of a pin comes from
+its real height and the body's colour, and from nothing else. Which pin hides
+which follows from the real heights alone.
+
+1. **The plate**, from `camera.plate()`: the top filled with `PLATE` and
+   outlined 1 px with `PLATE_EDGE`; the front edge filled with
+   `mix(PLATE, black, 0.45)`.
+2. **Glow**, added to the plate as in the top view: for each pin with
+   h > 0.02, `level = round(h ** 1.5 * 20) / 20` (Python's round), colour
+   tint × 0.30 × level, a radial glow centred on `project(c + 0.5, r + 0.5, 0)`
+   whose width and height are those of the projected 2.4 × 2.4 square around
+   that point: an ellipse lying on the plate.
+3. **Pins**, in `camera.order()`. Each face from `camera.faces(r, c, h)` is
+   filled with the pin's top-view colour `face = pin_face(h, tint)`, shaded by
+   a fixed light from the upper left: top `face`, front
+   `mix(face, black, 0.42)`, left `mix(face, black, 0.30)`, right
+   `mix(face, black, 0.55)`. The top is outlined 1 px with the top view's edge
+   colour, `mix(face, white, 0.05 + 0.2 * h)`. No shadows. Each platform covers
+   the hairline seams between a pin's own faces however it needs to.
+4. **The person** as before, after the body: live at the pointer; in a replay,
+   the ghost at `to_pixels(snap.person)`, the floor point.
+
+### Keys, buttons, words
+
+- F3 toggles `view.view3d` (desktop `View.view3d: bool = False`; page
+  `makeView` field `view3d: false`).
+- Help, after the F2 row: `F3` "3D view: see how high each pin stands; F3
+  again for the top view". The page's touch help gains `3D view` "see how high
+  each pin stands".
+- The desktop's status line hints: `Tab observer    F1 help    F3 3D view`
+  (panel closed) or `F1 help    F3 3D view` (open). In the 3D view the hint
+  reads `F3 top view`. The `__main__` epilog lists `F3 3D view` after F2.
+- The page: a button `<button type="button" data-act="view3d"
+  aria-pressed="false" aria-keyshortcuts="F3">3D view</button>` right after
+  Observer, whose `aria-pressed` follows the view; `keyAction` answers
+  `"view3d"` for F3. The page remembers the choice for the rest of the visit:
+  every new view (a session, Watch again, the replay behind the start card)
+  starts in the view last chosen. Nothing is stored. The start screen has the
+  3D view too: with the card beside the body, the button alone, where it
+  stands in the room; F3 at any width.
+- `lab/shot.py` gains 3D scenes.
 
 ## Decisions the specs left open
 

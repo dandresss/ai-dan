@@ -15,8 +15,10 @@ import math
 from dataclasses import dataclass, field
 
 import pygame
+from pygame import gfxdraw
 
 from .body import Snapshot
+from .camera import Camera, height
 
 # --- palette -------------------------------------------------------------
 ROOM_CENTER = (13, 13, 17)
@@ -209,6 +211,7 @@ class View:
     replay_total: float = 0.0
     paused: bool = False
     speed: float = 1.0
+    view3d: bool = False             # F3: the fixed 3D view
 
 
 @dataclass
@@ -220,22 +223,44 @@ class Layout:
     pitch: float
     panel: pygame.Rect | None
     u: float                          # type scale
+    camera: Camera | None = None      # set in the 3D view
+    heights: list | None = None       # the real heights the frame was drawn with, [row][col]
 
     def to_pin_units(self, px: tuple) -> tuple:
         """Window pixels -> (row, column) in pin units, past 0..8 in the margin."""
+        if self.camera:
+            return self.camera.floor(px)
         return ((px[1] - self.grid.top) / self.pitch, (px[0] - self.grid.left) / self.pitch)
 
     def to_pixels(self, pos: tuple) -> tuple:
+        if self.camera:
+            return self.camera.project(pos[1], pos[0], 0)
         return (self.grid.left + pos[1] * self.pitch, self.grid.top + pos[0] * self.pitch)
 
-    def pin_at(self, px: tuple, rows: int = 8, cols: int = 8) -> tuple | None:
+    def pin_at(self, px: tuple, rows: int = 8, cols: int = 8, hold: tuple | None = None) -> tuple | None:
+        """The pin under a pixel. In 3D it is the pin drawn there (`hold` keeps a press on its pin)."""
+        if self.camera:
+            return self.camera.pick(px, self.heights or [], hold)
         r, c = self.to_pin_units(px)
         if 0 <= r < rows and 0 <= c < cols:
             return (int(r), int(c))
         return None
 
+    def height_of(self, pin: tuple) -> float:
+        return height(self.heights, pin[0], pin[1])
 
-def layout(size: tuple, panel: bool, rows: int = 8, cols: int = 8) -> Layout:
+    def touch(self, px: tuple, hold: tuple | None = None, rows: int = 8, cols: int = 8) -> tuple | None:
+        """What a held button presses now: ((row, col), height), or None. `hold` is the
+        previous answer; it is returned unchanged while the press stays on its pin."""
+        pin = self.pin_at(px, rows, cols, hold)
+        if pin is None:
+            return None
+        if hold is not None and hold[0] == pin:
+            return hold
+        return (pin, self.height_of(pin))
+
+
+def layout(size: tuple, panel: bool, rows: int = 8, cols: int = 8, view3d: bool = False) -> Layout:
     w, h = max(size[0], 200), max(size[1], 160)
     u = max(0.75, min(w / 1100, h / 760, 1.8))
     panel_rect = None
@@ -250,7 +275,10 @@ def layout(size: tuple, panel: bool, rows: int = 8, cols: int = 8) -> Layout:
     gw, gh = int(pitch * cols), int(pitch * rows)
     grid = pygame.Rect(0, 0, gw, gh)
     grid.center = (room.centerx, int(h * 0.48))
-    return Layout(w, h, room, grid, pitch, panel_rect, u)
+    camera = None
+    if view3d:   # as tall as the top view's plate, and centred where it is
+        camera = Camera(rows, cols, grid.center, grid.height + int(pitch * 0.7), room.width - pitch)
+    return Layout(w, h, room, grid, pitch, panel_rect, u, camera)
 
 
 # --- cached textures -----------------------------------------------------
@@ -274,14 +302,19 @@ def _radial(size: int, falloff: float = 2.2) -> pygame.Surface:
 
 def _glow(diameter: int, rgb: tuple) -> pygame.Surface:
     """An additive glow sprite of a given colour (black = no light)."""
-    key = ("glow", diameter, rgb)
+    return _glow_ellipse(diameter, diameter, rgb)
+
+
+def _glow_ellipse(width: int, height: int, rgb: tuple) -> pygame.Surface:
+    """The same glow stretched to an ellipse, for the 3D view, where the plate is seen at a slant."""
+    key = ("glow", width, height, rgb)
     surf = _cache.get(key)
     if surf is None:
         if len(_cache) > 600:
             for k in [k for k in _cache if k[0] == "glow"]:
                 del _cache[k]
-        base = pygame.transform.smoothscale(_radial(64, 1.6), (diameter, diameter))
-        surf = pygame.Surface((diameter, diameter))
+        base = pygame.transform.smoothscale(_radial(64, 1.6), (width, height))
+        surf = pygame.Surface((width, height))
         surf.fill((0, 0, 0))
         tinted = base.copy()
         tinted.fill((*rgb, 255), special_flags=pygame.BLEND_RGBA_MULT)
@@ -321,16 +354,26 @@ def pin_face(h: float, tint: tuple) -> tuple:
     return _mix(dormant, lit, h ** 1.25)
 
 
+def _heights(snap: Snapshot) -> list:
+    return [[_height(snap, r, c) for c in range(snap.cols)] for r in range(snap.rows)]
+
+
+def _tint(snap: Snapshot) -> tuple:
+    return tuple(int(min(255, max(0, v))) for v in snap.color)
+
+
 def draw_body(surf: pygame.Surface, snap: Snapshot, lay: Layout) -> None:
+    if lay.camera:
+        return draw_body3d(surf, snap, lay)
     p = lay.pitch
     rows, cols = snap.rows, snap.cols
-    tint = tuple(int(min(255, max(0, v))) for v in snap.color)
+    tint = _tint(snap)
 
     plate = lay.grid.inflate(int(p * 0.7), int(p * 0.7))
     pygame.draw.rect(surf, PLATE, plate, border_radius=int(p * 0.18))
     pygame.draw.rect(surf, PLATE_EDGE, plate, width=1, border_radius=int(p * 0.18))
 
-    heights = [[_height(snap, r, c) for c in range(cols)] for r in range(rows)]
+    heights = _heights(snap)
 
     def square(r, c, h, grow=1.0):
         side = p * (0.70 + 0.14 * h) * grow
@@ -374,7 +417,63 @@ def draw_body(surf: pygame.Surface, snap: Snapshot, lay: Layout) -> None:
             pygame.draw.rect(surf, edge, rect, width=1, border_radius=radius)
 
 
+# --- the body in 3D ------------------------------------------------------
+# A fixed light from the upper left: how much darker each face is than the pin's top.
+SHADE = {"top": 0.0, "front": 0.42, "left": 0.30, "right": 0.55}
+
+
+def _fill(surf, color, quad, outline=None) -> None:
+    """An anti-aliased polygon. Filling and outlining in one colour keeps the
+    edges clean, with no hairline seams where faces meet."""
+    pts = [(round(x), round(y)) for x, y in quad]
+    gfxdraw.filled_polygon(surf, pts, color)
+    gfxdraw.aapolygon(surf, pts, color)
+    if outline:
+        pygame.draw.aalines(surf, outline, True, pts)
+
+
+def _glow3d(surf, cam: Camera, r: int, c: int, h: float, tint: tuple) -> None:
+    """The light a raised pin spills on the plate: an ellipse lying on it."""
+    level = round(h ** 1.5 * 20) / 20          # quantised so sprites cache
+    if h <= 0.02 or level <= 0:
+        return
+    x, y = c + 0.5, r + 0.5
+    left, right = cam.project(x - 1.2, y, 0), cam.project(x + 1.2, y, 0)
+    back, front = cam.project(x, y - 1.2, 0), cam.project(x, y + 1.2, 0)
+    w, hh = max(4, round(right[0] - left[0])), max(4, round(front[1] - back[1]))
+    cx, cy = cam.project(x, y, 0)
+    rgb = tuple(int(v * 0.30 * level) for v in tint)
+    surf.blit(_glow_ellipse(w, hh, rgb), (round(cx - w / 2), round(cy - hh / 2)),
+              special_flags=pygame.BLEND_ADD)
+
+
+def draw_body3d(surf: pygame.Surface, snap: Snapshot, lay: Layout) -> None:
+    cam = lay.camera
+    heights = _heights(snap)       # drawn from the body itself; lay.heights is for picking
+    tint = _tint(snap)
+
+    top, front = cam.plate()
+    _fill(surf, PLATE, top, outline=PLATE_EDGE)
+    _fill(surf, _mix(PLATE, (0, 0, 0), 0.45), front)
+
+    order = cam.order()
+    for r, c in order:
+        _glow3d(surf, cam, r, c, heights[r][c], tint)
+    for r, c in order:
+        h = heights[r][c]
+        face = pin_face(h, tint)
+        for kind, quad in cam.faces(r, c, h):
+            if kind == "top":
+                _fill(surf, face, quad, outline=_mix(face, (255, 255, 255), 0.05 + 0.2 * h))
+            else:
+                _fill(surf, _mix(face, (0, 0, 0), SHADE[kind]), quad)
+
+
 def draw_person(surf, lay: Layout, px: tuple, pressing: bool, ghost: bool = False) -> None:
+    # A recorded visitor far beyond the 3D view's camera lands absurdly far off
+    # the screen, past what pygame can draw: there is nothing to see anyway.
+    if not all(math.isfinite(v) and abs(v) < 1e6 for v in px):
+        return
     p = lay.pitch
     x, y = int(px[0]), int(px[1])
     if ghost:
@@ -502,7 +601,9 @@ def draw_status(surf, lay: Layout, snap: Snapshot | None, view: View) -> None:
     parts.append(status)
     s = text(f, "   ·   ".join(parts), TEXT_DIM)
     surf.blit(s, (x, y))
-    keys = "Tab observer    F1 help" if not view.panel else "F1 help"
+    keys = "F1 help    F3 " + ("top view" if view.view3d else "3D view")
+    if not view.panel:
+        keys = "Tab observer    " + keys
     k = text(font("sans", int(13 * u)), keys, TEXT_FAINT)
     kx = lay.room.right - k.get_width() - int(22 * u)
     surf.blit(k, (kx, y + 1))
@@ -650,6 +751,7 @@ def draw_help(surf, lay: Layout, view: View) -> None:
             ("Tab", "observer panel: the mind's private side"),
             ("F1", "this help"),
             ("F2", "hide all text, for clean recordings"),
+            ("F3", "3D view: see how high each pin stands; F3 again for the top view"),
             ("F11", "fullscreen"),
             ("Esc", "leave and close")]
     if view.mode == "replay":
@@ -930,10 +1032,11 @@ def draw(surf: pygame.Surface, snap: Snapshot | None, view: View) -> Layout:
     """Draw one frame. Returns the layout, so input can map pixels to pins."""
     rows = snap.rows if snap else 8
     cols = snap.cols if snap else 8
-    lay = layout(surf.get_size(), view.panel and not view.clean, rows, cols)
+    lay = layout(surf.get_size(), view.panel and not view.clean, rows, cols, view.view3d)
     surf.fill(ROOM_EDGE)
     surf.blit(_room(lay.room.size), lay.room.topleft)
     if snap is not None:
+        lay.heights = _heights(snap)
         draw_body(surf, snap, lay)
 
     # The person. Live: the mouse itself. Replay: the recorded visitor as a ghost.

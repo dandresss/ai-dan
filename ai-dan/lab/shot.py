@@ -156,11 +156,45 @@ def scene(name: str, size: tuple) -> tuple[Snapshot | None, View]:
         s = snap(swell(1.4), color=(120, 170, 255), person=(6.3, 9.4), t=21.0)
         return s, View(observer=observer(STORY), intro=0.0, clean=True, panel=True,
                        cursor=lay.to_pixels((6.3, 9.4)))
+    if name.endswith("3d"):
+        return scene3d(name, size)
+    raise KeyError(name)
+
+
+def wave() -> list:
+    return [[round(0.5 + 0.5 * math.sin(c * 0.9 + r * 0.35), 3) for c in range(N)] for r in range(N)]
+
+
+def scene3d(name: str, size: tuple) -> tuple[Snapshot, View]:
+    """The same room in the fixed 3D view."""
+    lay = layout(size, name == "panel3d", view3d=True)
+    near = lay.to_pixels((9.4, 5.2))       # on the floor just in front of the body
+    if name == "wave3d":
+        s = snap(wave(), color=(255, 196, 150), person=(9.4, 5.2), t=30.0)
+        return s, View(observer=observer(STORY[:9]), intro=0.0, view3d=True, cursor=near)
+    if name == "swell3d":
+        s = snap(swell(1.4), color=(120, 170, 255), person=(9.4, 5.2), t=21.0)
+        return s, View(observer=observer(STORY[:9]), intro=0.0, view3d=True, cursor=near)
+    if name == "touch3d":   # the finger on the top of a tall pin, with lower pins in front of it
+        field = [[0.35] * N for _ in range(N)]
+        field[3][5] = 1.0
+        top = next(q for kind, q in lay.camera.faces(3, 5, 1.0) if kind == "top")
+        tip = (sum(x for x, _ in top) / 4, sum(y for _, y in top) / 4)
+        s = snap(field, color=(255, 196, 150), person=lay.to_pin_units(tip), pressed=(3, 5), t=48.0)
+        return s, View(observer=observer(STORY[:9]), intro=0.0, view3d=True, cursor=tip,
+                       pressing=True, typing="can you feel th")
+    if name == "panel3d":
+        s = snap(swell(2.0), color=(120, 170, 255), person=(9.4, 5.2), t=19.0)
+        return s, View(observer=observer(STORY), intro=0.0, view3d=True, panel=True, cursor=near)
+    if name == "flat3d":
+        return snap(person=(9.4, 5.2), t=4.0), View(observer=observer(STORY[:3]), intro=0.0,
+                                                    view3d=True, cursor=near)
     raise KeyError(name)
 
 
 SCENES = ["intro", "dormant", "thinking", "breathing", "touch", "panel", "ended", "nokey",
-          "nokey-arrived", "dryrun", "replay", "error", "help", "clean"]
+          "nokey-arrived", "dryrun", "replay", "error", "help", "clean",
+          "wave3d", "swell3d", "touch3d", "panel3d", "flat3d"]
 
 
 def render_scene(name: str, size: tuple = (1280, 800)) -> pygame.Surface:

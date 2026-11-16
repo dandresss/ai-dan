@@ -54,6 +54,9 @@ class App:
                          intro=0.0 if self.replay else 1.0)
         self.mouse: tuple | None = None   # window pixels, while the person is in the room
         self.button = False
+        self.hold: tuple | None = None    # the press in progress: ((row, col), height)
+        self.hold_at: tuple | None = None # where the mouse was when the press was last chosen
+        self.f3_down = False              # F3 held down repeats; the view switches once
         self.arrived = False
         self.fullscreen = False
         self.layout = layout(size, False)
@@ -66,9 +69,15 @@ class App:
         return self.layout.to_pin_units(self.mouse)
 
     def _pressed(self) -> tuple | None:
+        """The pin under the held button. Only the person moves a press: it is
+        chosen again when the mouse moves, never because the body moved under it."""
         if self.mouse is None or not self.button:
+            self.hold = self.hold_at = None
             return None
-        return self.layout.pin_at(self.mouse)
+        if self.mouse != self.hold_at:
+            self.hold = self.layout.touch(self.mouse, self.hold)
+            self.hold_at = self.mouse
+        return self.hold[0] if self.hold else None
 
     def _key(self, event) -> bool:
         """Handle a key press. Returns False to quit."""
@@ -82,6 +91,10 @@ class App:
             view.help = not view.help
         elif key == pygame.K_F2:
             view.clean = not view.clean
+        elif key == pygame.K_F3:
+            if not self.f3_down:
+                view.view3d = not view.view3d
+            self.f3_down = True
         elif key == pygame.K_F11:
             self._toggle_fullscreen()
         elif self.replay:
@@ -112,6 +125,8 @@ class App:
             if event.type == pygame.KEYDOWN:
                 if not self._key(event):
                     return False
+            elif event.type == pygame.KEYUP and event.key == pygame.K_F3:
+                self.f3_down = False
             elif event.type == pygame.TEXTINPUT and not self.replay:
                 chars = "".join(ch for ch in event.text if ch.isprintable())
                 self.view.typing = (self.view.typing + chars)[:MAX_LINE]
@@ -125,6 +140,7 @@ class App:
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 self.button = True
                 self.mouse = event.pos
+                self.hold = self.hold_at = None   # a new press, even if the last release was missed
                 self.arrived = True
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 self.button = False

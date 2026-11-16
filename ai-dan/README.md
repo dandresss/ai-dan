@@ -53,7 +53,7 @@ Both hosts forward only this lab's prompt, tools, settings and conversation shap
 
 ## In the room
 
-On the desktop. The web page works the same way, with buttons for help, hiding text and fullscreen.
+On the desktop. The web page works the same way, with buttons for help, hiding text, the 3D view and fullscreen. The 3D view is there from the start screen, for the first waking replayed beside the card, and whatever you open next starts in the view you chose.
 
 | You | How |
 |---|---|
@@ -67,12 +67,15 @@ On the desktop. The web page works the same way, with buttons for help, hiding t
 | Tab | Observer panel: the mind's thoughts and calls. Hidden by default, because the person in the room is not meant to see them. |
 | F1 | Help |
 | F2 | Hide all text, for clean recordings |
+| F3 | 3D view: the pins as columns, seen from a fixed camera in front of the body, to show how high each one stands. F3 again for the top view. |
 | F11 | Fullscreen |
 | Esc | Quit |
 
 The mind wakes when you arrive, when you speak, when you leave, and every 12 seconds while you are there. Each wake hands it one bare line, the time and anything you said, and four tools: `play`, `stop`, `sense`, `set_color`. A touch does not wake it. It has to notice the touch itself, as a pin that is not where it was told to be.
 
-Nothing on screen moves unless the body's state says so. A pin's brightness is its real height and nothing else.
+Nothing on screen moves unless the body's state says so. A pin's brightness is its real height and nothing else, in both views; in the 3D view its height is also how tall it stands. The camera never moves.
+
+In the 3D view you stand where the pointer meets the floor, and a press goes to the pin drawn under the pointer. It stays on that pin while you hold the button, even as the pin sinks: only your own movement moves a press, never the body's.
 
 ## Commands
 
@@ -127,6 +130,7 @@ mind ── harness.py ◀── wakes ── events ─────────
 | `lab/log.py` | `harness.md` | One file per session, one line per event |
 | `lab/analyze.py` | `mind.md` | The success criterion |
 | `lab/render.py`, `lab/app.py` | `shape-display.md` | The window |
+| `lab/camera.py` | | The fixed 3D view: where things land on the screen, the floor under the pointer, the pin under a press |
 | `lab/config.py` | all | Every parameter from every spec |
 
 `ARCHITECTURE.md` has the interfaces, the log format and the decisions made where the specs were open. Some tests compare the prompt and tool descriptions word for word with the specs, so they expect the spec files one folder up.
@@ -161,6 +165,7 @@ Each of these is a default to confirm or overturn.
 | Tool schemas | "the shape of a track" | Field names and types only | No height range, grid size or caps reach the mind. |
 | Refusals | Not specified | Logged, turn skipped, no fallback model | A session should be one model throughout. |
 | Setup | A venv, numpy, pygame | uv, no numpy, `pygame-ce` | uv makes it one command. 64 pins do not need numpy. `pygame-ce` is the maintained fork and has builds for Python 3.14. |
+| Rendering | A top view; "a 3D view" is out of the beta | F3, or the 3D view button on the page, switches to a fixed 3D view | Asked for by the author on 2026-11-16, to see at a glance how high each pin stands. The top view stays the default, and the view for the experiment. |
 | 30 seconds of motion | "keep that motion for 30 seconds" | Must be in the log, counted from when each pin's track starts | A session that ends early has not shown it. |
 
 One finding about the specs themselves: shape-display criterion 2 says a full-range oscillation faster than 1 cycle per second "never reaches the extremes". A pin that starts at 0 does return to 0. The test checks that it never reaches 1 and that the swing stays under half the range.
