@@ -1,0 +1,4 @@
+# Every text file keeps LF endings on every machine: some tests compare bytes,
+# and Git for Windows would otherwise check files out with CRLF.
+* text=auto eol=lf
+*.png binary
