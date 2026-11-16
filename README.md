@@ -40,6 +40,8 @@ The specifications for the virtual lab, and in `ai-dan/` the lab built from them
 | `harness.md` | Harness | What wakes the agent, what it receives, limits, memory and logging |
 | `mind.md` | Mind | The discovery prompt, memory across sessions and the success criterion |
 
+A short deck in Spanish covers the goal, the phase, the body contract and the criteria behind the prototype: [`ai-dan/docs/un-cuerpo-para-despertar.pptx`](ai-dan/docs/un-cuerpo-para-despertar.pptx).
+
 ## Run it
 
 You need git and [uv](https://docs.astral.sh/uv/), which fetches Python and the three packages the lab uses.
