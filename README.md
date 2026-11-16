@@ -30,7 +30,7 @@ Contact: `David Huamani - dandress.hc@gmail.com`
 
 ## What is in this package
 
-Specifications for the virtual lab. There is no code yet; these are the documents the code will be written from.
+The specifications for the virtual lab, and in `ai-dan/` the lab built from them.
 
 | File | Part | What it defines |
 |---|---|---|
@@ -39,6 +39,20 @@ Specifications for the virtual lab. There is no code yet; these are the document
 | `nervous-system.md` | Nervous system | The player that turns tracks into motion; later, the firmware |
 | `harness.md` | Harness | What wakes the agent, what it receives, limits, memory and logging |
 | `mind.md` | Mind | The discovery prompt, memory across sessions and the success criterion |
+
+## Run it
+
+You need git and [uv](https://docs.astral.sh/uv/), which fetches Python and the three packages the lab uses.
+
+```
+git clone https://github.com/dandresss/ai-dan.git
+cd ai-dan/ai-dan
+uv run main.py
+```
+
+That opens the lab in your browser at http://localhost:8080. Without an API key you can watch the first waking and run the wiring test. To wake a mind, copy `.env.example` to `.env` and put your Anthropic API key after `ANTHROPIC_API_KEY=`. [`ai-dan/README.md`](ai-dan/README.md) has the rest: the desktop room, replays, and how to run the experiment and measure it.
+
+The same lab runs online at [ai-dan-web.vercel.app](https://ai-dan-web.vercel.app), where waking a mind takes an access code.
 
 ## How it works, briefly
 
@@ -74,17 +88,10 @@ These were set as defaults and have not been confirmed. Each document lists its 
 - Memory across sessions as a single note that gets replaced.
 - The thresholds of the success criterion and the person's script.
 
-## Planned setup
-
-- Python 3.11 or later, in a virtual environment.
-- Dependencies: `anthropic`, `numpy`, `pygame`, `python-dotenv`.
-- The API key in a local `.env` file, outside the repository.
-
 ## Next steps
 
-1. Write the scaffold: simulator, nervous system, contract and a minimal harness loop.
-2. Check each document's acceptance criteria.
-3. Run the 10 first-day sessions and compute the criterion from the logs.
+1. Run the 10 first-day sessions, with a person following the script in `mind.md`, and compute the criterion from the logs.
+2. Read the result as `mind.md` says. If it emerges consistently, move on to memory across sessions and the port to the board; if not, change one thing and run another batch.
 
 ## Inspiration
 

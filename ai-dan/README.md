@@ -137,7 +137,7 @@ mind ── harness.py ◀── wakes ── events ─────────
 
 ## What has been checked
 
-- 215 tests pass, including one for each acceptance criterion in the body specs.
+- 309 Python tests pass, including one for each acceptance criterion in the body specs, and 253 for the web page.
 - Three live sessions with `claude-sonnet-5-5`, 23 turns in all, ran without an API error. One used fast pulses, early fading of old `sense` results and the `remember` tool, to exercise the paths most likely to break.
 - Every logged session, live ones included, replays to identical body states. A tampered log is caught.
 - An independent review compared the code with the specs. Its findings were fixed and are covered by tests.
